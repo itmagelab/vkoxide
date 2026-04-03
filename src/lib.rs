@@ -2,6 +2,8 @@ pub mod utils;
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+const API_VERSION: &str = "5.199";
+
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<reqwest::Client>,
@@ -9,18 +11,20 @@ pub struct Client {
 
 pub struct Bot {
     token: Arc<str>,
+    group_id: Arc<str>,
     api_url: Arc<reqwest::Url>,
     client: Client,
 }
 
 impl Bot {
-    pub fn new<S>(token: S) -> Self
+    pub fn new<S>(token: S, group_id: S) -> Self
     where
         S: Into<String>,
     {
         let api_url = reqwest::Url::from_str("https://api.vk.ru").expect("");
         Self {
             token: Arc::from(token.into()),
+            group_id: Arc::from(group_id.into()),
             api_url: Arc::from(api_url),
             client: Client {
                 inner: Arc::new(reqwest::Client::new()),
@@ -43,40 +47,102 @@ use serde_json::Value;
 pub struct LongPollServer {
     pub server: String,
     pub key: String,
-    pub ts: i64,
+    pub ts: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LongPollResponse {
-    pub ts: i64,
-    pub updates: Vec<Vec<Value>>,
+    pub ts: String,
+    pub updates: Vec<Update>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Response<T> {
-    response: T,
+pub struct Update {
+    pub event_id: String,
+    pub group_id: i64,
+    pub v: String,
+
+    #[serde(flatten)]
+    pub kind: UpdateKind,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum UpdateKind {
+    Known(KnownUpdate),
+    Unknown(Value),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub enum KnownUpdate {
+    #[serde(rename = "message_reply")]
+    MessageReply { object: MessageReplyObject },
+    #[serde(rename = "message_typing_state")]
+    MessageTypingState { object: TypingStateObject },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TypingStateObject {
+    pub from_id: i64,
+    pub to_id: i64,
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessageReplyObject {
+    pub admin_author_id: Option<i64>,
+    pub attachments: Vec<serde_json::Value>,
+    pub conversation_message_id: i64,
+    pub date: i64,
+    pub from_id: i64,
+    pub fwd_messages: Vec<serde_json::Value>,
+    pub id: i64,
+    pub important: bool,
+    pub is_hidden: bool,
+    pub out: i32,
+    pub peer_id: i64,
+    pub random_id: i64,
+    pub text: String,
+    pub version: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Response<T> {
+    Ok { response: T },
+    Err { error: ApiError },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApiError {
+    pub error_code: i32,
+    pub error_msg: String,
+    pub request_params: Vec<RequestParam>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RequestParam {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug)]
 pub enum Event {
     Message(Message),
     Typing(Typing),
-    Unknown(Vec<Value>),
 }
 
 #[derive(Debug)]
 pub struct Message {
     pub message_id: i64,
-    pub flags: i64,
     pub user_id: i64,
-    pub ts: i64,
     pub text: String,
 }
 
 #[derive(Debug)]
 pub struct Typing {
     pub user_id: i64,
-    pub flags: i64,
 }
 
 impl Dispatcher {
@@ -86,13 +152,13 @@ impl Dispatcher {
 
     pub async fn server(&self) -> anyhow::Result<LongPollServer> {
         let token = &self.bot.token;
+        let group_id = self.bot.group_id.to_string();
 
         let mut params = HashMap::new();
-        params.insert("group_id", "0");
-        params.insert("v", "5.199");
+        params.insert("group_id", group_id.as_str());
+        params.insert("v", API_VERSION);
 
-        let url = format!("{}/method/messages.getLongPollServer", self.bot.api_url);
-
+        let url = format!("{}/method/groups.getLongPollServer", self.bot.api_url);
         let response = self
             .bot
             .client
@@ -104,7 +170,11 @@ impl Dispatcher {
             .await?
             .json::<Response<LongPollServer>>()
             .await?;
-        Ok(response.response)
+
+        match response {
+            Response::Ok { response } => Ok(response),
+            Response::Err { error } => Err(anyhow::anyhow!(error.error_msg)),
+        }
     }
 
     pub async fn dispatch(self) -> anyhow::Result<()> {
@@ -118,11 +188,11 @@ impl Dispatcher {
                 ("act", "a_check"),
                 ("key", &server.key),
                 ("wait", "25"),
-                ("version", "3"),
                 ("ts", ts_string.as_str()),
             ];
 
-            let url = format!("https://{}", server.server);
+            let url = server.server.to_string();
+
             let response = self
                 .bot
                 .client
@@ -134,55 +204,30 @@ impl Dispatcher {
                 .json::<LongPollResponse>()
                 .await?;
 
-            ts = response.ts;
+            ts = response.ts.to_string();
 
-            dbg!(&response.updates);
             for update in response.updates {
-                match update.as_slice() {
-                    [
-                        Value::Number(code),
-                        Value::Number(user_id),
-                        Value::Number(flags),
-                    ] if code.as_i64() == Some(61) => {
-                        let user_id = user_id
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message user_id"))?;
-                        let flags = flags
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message flags"))?;
-                        Event::Typing(Typing { user_id, flags })
-                    }
-                    [
-                        Value::Number(code),
-                        Value::Number(message_id),
-                        Value::Number(flags),
-                        Value::Number(user_id),
-                        Value::Number(ts),
-                        Value::String(text),
-                    ] if code.as_i64() == Some(4) => {
-                        let message_id = message_id
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message message_id"))?;
-                        let flags = flags
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message flags"))?;
-                        let user_id = user_id
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message user_id"))?;
-                        let ts = ts
-                            .as_i64()
-                            .ok_or_else(|| anyhow::anyhow!("Invalid message ts"))?;
-                        let text = text.into();
+                println!("Update: {:#?}", update);
+                let event = match update.kind {
+                    UpdateKind::Known(KnownUpdate::MessageReply { object }) => {
+                        let message_id = object.conversation_message_id;
+                        let user_id = object.from_id;
+                        let text = object.text;
                         Event::Message(Message {
                             message_id,
-                            flags,
                             user_id,
-                            ts,
                             text,
                         })
                     }
-                    _ => Event::Unknown(vec![]),
+                    UpdateKind::Known(KnownUpdate::MessageTypingState { object }) => {
+                        let user_id = object.from_id;
+                        Event::Typing(Typing { user_id })
+                    }
+                    UpdateKind::Unknown(value) => {
+                        todo!("Unknown update: {}", value);
+                    }
                 };
+                println!("Event: {:#?}", event);
             }
         }
     }
@@ -204,7 +249,8 @@ mod tests {
         dotenvy::dotenv().ok();
 
         let token = std::env::var("VKOXIDE_TOKEN").unwrap();
-        let bot = Bot::new(token);
+        let group_id = std::env::var("VKOXIDE_GROUP_ID").unwrap();
+        let bot = Bot::new(token, group_id);
 
         Dispatcher::builder(bot).build().dispatch().await.unwrap();
     }
