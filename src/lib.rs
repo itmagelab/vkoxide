@@ -127,6 +127,15 @@ pub struct RequestParam {
     pub value: String,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum VkError {
+    #[error("API Error {}: {}", .0.error_code, .0.error_msg)]
+    Api(ApiError),
+    #[error("HTTP request error: {0}")]
+    Http(#[from] reqwest::Error),
+}
+
+
 #[derive(Debug)]
 pub enum Event {
     Message(Message),
@@ -150,7 +159,7 @@ impl Dispatcher {
         DispatcherBuilder { bot }
     }
 
-    pub async fn server(&self) -> anyhow::Result<LongPollServer> {
+    pub async fn server(&self) -> Result<LongPollServer, VkError> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
 
@@ -173,11 +182,11 @@ impl Dispatcher {
 
         match response {
             Response::Ok { response } => Ok(response),
-            Response::Err { error } => Err(anyhow::anyhow!(error.error_msg)),
+            Response::Err { error } => Err(VkError::Api(error)),
         }
     }
 
-    pub async fn dispatch(self) -> anyhow::Result<()> {
+    pub async fn dispatch(self) -> Result<(), VkError> {
         let server = self.server().await?;
 
         let mut ts = server.ts;
