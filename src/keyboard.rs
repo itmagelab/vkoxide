@@ -61,15 +61,13 @@ mod tests {
 
     #[test]
     fn test_keyboard_serialization() {
-        let kb = Keyboard::new(false, true).add_row(vec![
-            KeyboardButton {
-                action: Action::Text {
-                    label: "Btn".to_string(),
-                    payload: Some("payload".to_string()),
-                },
-                color: Some(ButtonColor::Primary),
-            }
-        ]);
+        let kb = Keyboard::new(false, true).add_row(vec![KeyboardButton {
+            action: Action::Text {
+                label: "Btn".to_string(),
+                payload: Some("payload".to_string()),
+            },
+            color: Some(ButtonColor::Primary),
+        }]);
 
         let json = serde_json::to_string(&kb).unwrap();
         // Проверяем, что нет лишних пробелов или неправильных кейсов у enum

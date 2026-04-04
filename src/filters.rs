@@ -80,7 +80,7 @@ mod tests {
             "conversation_message_id": 1,
             "version": 1
         });
-        
+
         if let Some(p) = payload {
             msg_obj["payload"] = serde_json::json!(p);
         }
@@ -94,7 +94,8 @@ mod tests {
                 "message": msg_obj,
                 "client_info": null
             }
-        })).unwrap()
+        }))
+        .unwrap()
     }
 
     #[test]
