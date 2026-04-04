@@ -33,7 +33,11 @@ impl Bot {
         }
     }
 
-    pub async fn send_message(&self, peer_id: i64, message: &str) -> Result<serde_json::Value, VkError> {
+    pub async fn send_message(
+        &self,
+        peer_id: i64,
+        message: &str,
+    ) -> Result<serde_json::Value, VkError> {
         let mut params = HashMap::new();
         let peer_id_str = peer_id.to_string();
         params.insert("peer_id", peer_id_str.as_str());

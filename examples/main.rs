@@ -21,7 +21,9 @@ async fn main() {
                     if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
                         let answer = format!("Вы сказали: {}", object.message.text);
                         println!("Новое сообщение от {}: отвечаем...", object.message.from_id);
-                        ctx.bot.send_message(object.message.from_id, &answer).await?;
+                        ctx.bot
+                            .send_message(object.message.from_id, &answer)
+                            .await?;
                     }
                     Ok(())
                 })
