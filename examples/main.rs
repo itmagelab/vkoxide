@@ -1,8 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vkoxide::{
-    Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind,
+    Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters,
     keyboard::{Action, ButtonColor, Keyboard, KeyboardButton},
-    filters,
 };
 
 struct MyState {

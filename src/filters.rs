@@ -43,13 +43,19 @@ pub fn is_text(expected: &'static str) -> impl Fn(&Update) -> bool + Send + Sync
 /// Фильтр для всех событий `message_event` (callback от inline-кнопок)
 pub fn is_callback() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
-        matches!(update.kind, UpdateKind::Known(KnownUpdate::MessageEvent { .. }))
+        matches!(
+            update.kind,
+            UpdateKind::Known(KnownUpdate::MessageEvent { .. })
+        )
     }
 }
 
 /// Базовый фильтр для любого нового сообщения
 pub fn any_message() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
-        matches!(update.kind, UpdateKind::Known(KnownUpdate::MessageNew { .. }))
+        matches!(
+            update.kind,
+            UpdateKind::Known(KnownUpdate::MessageNew { .. })
+        )
     }
 }
