@@ -302,15 +302,16 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
         }
     }
 
-    pub fn add_handler<F, H>(mut self, filter: F, handler: H) -> Self
+    pub fn add_handler<F, H, Fut>(mut self, filter: F, handler: H) -> Self
     where
         F: Fn(&Update) -> bool + Send + Sync + 'static,
-        H: Fn(Update, Context<S>) -> BoxFuture<'static, Result<(), VkError>>
-            + Send
-            + Sync
-            + 'static,
+        H: Fn(Update, Context<S>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<(), VkError>> + Send + 'static,
     {
-        self.handlers.push((Box::new(filter), Box::new(handler)));
+        let boxed_handler = Box::new(move |update, ctx| {
+            Box::pin(handler(update, ctx)) as BoxFuture<'static, Result<(), VkError>>
+        });
+        self.handlers.push((Box::new(filter), boxed_handler));
         self
     }
 
