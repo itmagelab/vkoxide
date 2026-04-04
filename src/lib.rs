@@ -38,49 +38,22 @@ impl Bot {
         &self,
         peer_id: i64,
         message: &str,
+        keyboard: Option<&keyboard::Keyboard>,
     ) -> Result<serde_json::Value, VkError> {
         let peer_id_str = peer_id.to_string();
-        let params = [
-            ("peer_id", peer_id_str.as_str()),
-            ("message", message),
-            ("random_id", "0"),
-            ("v", API_VERSION),
-        ];
-
-        let url = format!("{}/method/messages.send", self.api_url);
-        let response = self
-            .client
-            .inner
-            .post(url) // Note: messages.send works better with POST just in case message is too long
-            .bearer_auth(self.token.as_ref())
-            .query(&params)
-            .send()
-            .await?
-            .json::<Response<serde_json::Value>>()
-            .await?;
-
-        match response {
-            Response::Ok { response } => Ok(response),
-            Response::Err { error } => Err(VkError::Api(error)),
-        }
-    }
-
-    pub async fn send_message_with_keyboard(
-        &self,
-        peer_id: i64,
-        message: &str,
-        keyboard: &keyboard::Keyboard,
-    ) -> Result<serde_json::Value, VkError> {
-        let peer_id_str = peer_id.to_string();
-        let keyboard_json = serde_json::to_string(keyboard).unwrap_or_default();
         
-        let params = [
+        let mut params = vec![
             ("peer_id", peer_id_str.as_str()),
             ("message", message),
-            ("keyboard", keyboard_json.as_str()),
             ("random_id", "0"),
             ("v", API_VERSION),
         ];
+
+        let keyboard_json;
+        if let Some(kb) = keyboard {
+            keyboard_json = serde_json::to_string(kb).unwrap_or_default();
+            params.push(("keyboard", keyboard_json.as_str()));
+        }
 
         let url = format!("{}/method/messages.send", self.api_url);
         let response = self

@@ -61,7 +61,7 @@ async fn main() {
                     ]);
 
                     ctx.bot
-                        .send_message_with_keyboard(object.message.from_id, &answer, &keyboard)
+                        .send_message(object.message.from_id, &answer, Some(&keyboard))
                         .await?;
                 }
                 Ok(())
