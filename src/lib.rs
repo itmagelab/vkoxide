@@ -1,6 +1,6 @@
 pub mod utils;
 
-use std::{collections::HashMap, future::Future, pin::Pin, str::FromStr, sync::Arc};
+use std::{future::Future, pin::Pin, str::FromStr, sync::Arc};
 
 const API_VERSION: &str = "5.199";
 
@@ -38,12 +38,13 @@ impl Bot {
         peer_id: i64,
         message: &str,
     ) -> Result<serde_json::Value, VkError> {
-        let mut params = HashMap::new();
         let peer_id_str = peer_id.to_string();
-        params.insert("peer_id", peer_id_str.as_str());
-        params.insert("message", message);
-        params.insert("random_id", "0");
-        params.insert("v", API_VERSION);
+        let params = [
+            ("peer_id", peer_id_str.as_str()),
+            ("message", message),
+            ("random_id", "0"),
+            ("v", API_VERSION),
+        ];
 
         let url = format!("{}/method/messages.send", self.api_url);
         let response = self
@@ -128,6 +129,8 @@ pub enum KnownUpdate {
     MessageNew { object: MessageNewObject },
     #[serde(rename = "message_typing_state")]
     MessageTypingState { object: TypingStateObject },
+    #[serde(rename = "message_read")]
+    MessageRead { object: MessageReadObject },
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -135,6 +138,14 @@ pub struct TypingStateObject {
     pub from_id: i64,
     pub to_id: i64,
     pub state: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MessageReadObject {
+    pub from_id: i64,
+    pub peer_id: i64,
+    pub read_message_id: i64,
+    pub conversation_message_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -200,9 +211,10 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
 
-        let mut params = HashMap::new();
-        params.insert("group_id", group_id.as_str());
-        params.insert("v", API_VERSION);
+        let params = [
+            ("group_id", group_id.as_str()),
+            ("v", API_VERSION),
+        ];
 
         let url = format!("{}/method/groups.getLongPollServer", self.bot.api_url);
         let response = self
