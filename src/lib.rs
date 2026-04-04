@@ -1,5 +1,5 @@
-pub mod utils;
 pub mod keyboard;
+pub mod utils;
 
 use std::{future::Future, pin::Pin, str::FromStr, sync::Arc};
 
@@ -41,7 +41,7 @@ impl Bot {
         keyboard: Option<&keyboard::Keyboard>,
     ) -> Result<serde_json::Value, VkError> {
         let peer_id_str = peer_id.to_string();
-        
+
         let mut params = vec![
             ("peer_id", peer_id_str.as_str()),
             ("message", message),
@@ -75,10 +75,7 @@ impl Bot {
 
     pub async fn get_user(&self, user_id: i64) -> Result<User, VkError> {
         let user_id_str = user_id.to_string();
-        let params = vec![
-            ("user_ids", user_id_str.as_str()),
-            ("v", API_VERSION),
-        ];
+        let params = vec![("user_ids", user_id_str.as_str()), ("v", API_VERSION)];
 
         let url = format!("{}/method/users.get", self.api_url);
         let response = self
@@ -93,15 +90,47 @@ impl Bot {
             .await?;
 
         match response {
-            Response::Ok { response } => {
-                response.into_iter().next().ok_or_else(|| {
-                    VkError::Api(ApiError {
-                        error_code: 0,
-                        error_msg: "User not found".to_string(),
-                        request_params: vec![],
-                    })
+            Response::Ok { response } => response.into_iter().next().ok_or_else(|| {
+                VkError::Api(ApiError {
+                    error_code: 0,
+                    error_msg: "User not found".to_string(),
+                    request_params: vec![],
                 })
-            }
+            }),
+            Response::Err { error } => Err(VkError::Api(error)),
+        }
+    }
+
+    pub async fn get_conversation(&self, peer_id: i64) -> Result<Conversation, VkError> {
+        let peer_ids_str = peer_id.to_string();
+        let group_id_str = self.group_id.to_string();
+
+        let params = vec![
+            ("peer_ids", peer_ids_str.as_str()),
+            ("group_id", group_id_str.as_str()),
+            ("v", API_VERSION),
+        ];
+
+        let url = format!("{}/method/messages.getConversationsById", self.api_url);
+        let response = self
+            .client
+            .inner
+            .post(url)
+            .bearer_auth(self.token.as_ref())
+            .query(&params)
+            .send()
+            .await?
+            .json::<Response<ConversationsResponse>>()
+            .await?;
+
+        match response {
+            Response::Ok { response } => response.items.into_iter().next().ok_or_else(|| {
+                VkError::Api(ApiError {
+                    error_code: 0,
+                    error_msg: "Conversation not found".to_string(),
+                    request_params: vec![],
+                })
+            }),
             Response::Err { error } => Err(VkError::Api(error)),
         }
     }
@@ -193,6 +222,32 @@ pub struct User {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct Conversation {
+    pub peer: Peer,
+    pub chat_settings: Option<ChatSettings>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Peer {
+    pub id: i64,
+    #[serde(rename = "type")]
+    pub peer_type: String,
+    pub local_id: i64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ChatSettings {
+    pub title: String,
+    pub members_count: i64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ConversationsResponse {
+    pub count: i64,
+    pub items: Vec<Conversation>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct MessageReadObject {
     pub from_id: i64,
     pub peer_id: i64,
@@ -263,10 +318,7 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
 
-        let params = [
-            ("group_id", group_id.as_str()),
-            ("v", API_VERSION),
-        ];
+        let params = [("group_id", group_id.as_str()), ("v", API_VERSION)];
 
         let url = format!("{}/method/groups.getLongPollServer", self.bot.api_url);
         let response = self

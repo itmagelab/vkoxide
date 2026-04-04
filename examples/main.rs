@@ -36,14 +36,20 @@ async fn main() {
                     // Получаем информацию о пользователе напрямую
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
+                    // Получаем информацию о текущем чате (беседе)
+                    let conv = ctx.bot.get_conversation(object.message.peer_id).await?;
+                    let chat_title = conv
+                        .chat_settings
+                        .map_or("Ваш диалог".to_string(), |s| s.title);
+
                     let answer = format!(
-                        "{}, вы сказали: {}\nВы - {}-й написавший мне человек!",
-                        user.first_name, object.message.text, current_count
+                        "{}, вы сказали: {}\nЧат: {}\nВы - {}-й написавший мне человек!",
+                        user.first_name, object.message.text, chat_title, current_count
                     );
 
                     println!(
-                        "Новое сообщение от {} {}, это уже {} сообщение...",
-                        user.first_name, user.last_name, current_count
+                        "Новое сообщение от {} {} в чате '{}'",
+                        user.first_name, user.last_name, chat_title
                     );
 
                     let keyboard = Keyboard::new(false, true).add_row(vec![

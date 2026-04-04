@@ -1,5 +1,4 @@
 use serde::Serialize;
-use serde_json::Value;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct Keyboard {
@@ -19,9 +18,15 @@ pub struct KeyboardButton {
 #[serde(tag = "type")]
 pub enum Action {
     #[serde(rename = "text")]
-    Text { label: String, payload: Option<String> },
+    Text {
+        label: String,
+        payload: Option<String>,
+    },
     #[serde(rename = "callback")]
-    Callback { label: String, payload: Option<String> },
+    Callback {
+        label: String,
+        payload: Option<String>,
+    },
     #[serde(rename = "open_link")]
     OpenLink { link: String, label: String },
 }
