@@ -17,14 +17,12 @@ pub fn command(prefix: &'static str) -> impl Fn(&Update) -> bool + Send + Sync +
 /// Filter for the "Start" button (payload contains {"command":"start"})
 pub fn is_start() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
-        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind {
-            if let Some(payload_str) = &object.message.payload {
-                if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(payload_str) {
-                    if let Some(Value::String(cmd)) = map.get("command") {
-                        return cmd == "start";
-                    }
-                }
-            }
+        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind
+            && let Some(payload_str) = &object.message.payload
+            && let Ok(Value::Object(map)) = serde_json::from_str::<Value>(payload_str)
+            && let Some(Value::String(cmd)) = map.get("command")
+        {
+            return cmd == "start";
         }
         false
     }
