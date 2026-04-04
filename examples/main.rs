@@ -1,5 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use vkoxide::{Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind};
+use vkoxide::{
+    Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind,
+    keyboard::{Action, ButtonColor, Keyboard, KeyboardButton},
+};
 
 struct MyState {
     pub message_count: AtomicUsize,
@@ -40,8 +43,25 @@ async fn main() {
                         object.message.from_id, current_count
                     );
 
+                    let keyboard = Keyboard::new(false, true).add_row(vec![
+                        KeyboardButton {
+                            action: Action::Text {
+                                label: "Кнопка 1".to_string(),
+                                payload: Some("{\"btn\": 1}".to_string()),
+                            },
+                            color: Some(ButtonColor::Primary),
+                        },
+                        KeyboardButton {
+                            action: Action::Text {
+                                label: "Отмена".to_string(),
+                                payload: None,
+                            },
+                            color: Some(ButtonColor::Negative),
+                        },
+                    ]);
+
                     ctx.bot
-                        .send_message(object.message.from_id, &answer)
+                        .send_message_with_keyboard(object.message.from_id, &answer, &keyboard)
                         .await?;
                 }
                 Ok(())
