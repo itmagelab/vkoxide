@@ -77,7 +77,9 @@ pub enum UpdateKind {
 #[serde(tag = "type")]
 pub enum KnownUpdate {
     #[serde(rename = "message_reply")]
-    MessageReply { object: MessageReplyObject },
+    MessageReply { object: MessageObject },
+    #[serde(rename = "message_new")]
+    MessageNew { object: MessageNewObject },
     #[serde(rename = "message_typing_state")]
     MessageTypingState { object: TypingStateObject },
 }
@@ -90,7 +92,13 @@ pub struct TypingStateObject {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct MessageReplyObject {
+pub struct MessageNewObject {
+    pub message: MessageObject,
+    pub client_info: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessageObject {
     pub admin_author_id: Option<i64>,
     pub attachments: Vec<serde_json::Value>,
     pub conversation_message_id: i64,
@@ -138,7 +146,8 @@ pub enum VkError {
 
 #[derive(Debug)]
 pub enum Event {
-    Message(Message),
+    MessageNew(Message),
+    MessageReply(Message),
     Typing(Typing),
 }
 
@@ -218,11 +227,21 @@ impl Dispatcher {
             for update in response.updates {
                 println!("Update: {:#?}", update);
                 let event = match update.kind {
+                    UpdateKind::Known(KnownUpdate::MessageNew { object }) => {
+                        let message_id = object.message.conversation_message_id;
+                        let user_id = object.message.from_id;
+                        let text = object.message.text;
+                        Event::MessageNew(Message {
+                            message_id,
+                            user_id,
+                            text,
+                        })
+                    }
                     UpdateKind::Known(KnownUpdate::MessageReply { object }) => {
                         let message_id = object.conversation_message_id;
                         let user_id = object.from_id;
                         let text = object.text;
-                        Event::Message(Message {
+                        Event::MessageReply(Message {
                             message_id,
                             user_id,
                             text,
