@@ -1,5 +1,6 @@
 pub mod keyboard;
 pub mod utils;
+pub mod filters;
 
 use std::{future::Future, pin::Pin, str::FromStr, sync::Arc};
 
@@ -328,6 +329,7 @@ pub struct MessageObject {
     pub peer_id: i64,
     pub random_id: i64,
     pub text: String,
+    pub payload: Option<String>,
     pub version: i64,
 }
 

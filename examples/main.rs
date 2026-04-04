@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use vkoxide::{
     Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind,
     keyboard::{Action, ButtonColor, Keyboard, KeyboardButton},
+    filters,
 };
 
 struct MyState {
@@ -23,12 +24,7 @@ async fn main() {
     let dispatcher = Dispatcher::builder(bot)
         .state(app_state)
         .add_handler(
-            |update: &Update| -> bool {
-                matches!(
-                    update.kind,
-                    UpdateKind::Known(KnownUpdate::MessageNew { .. })
-                )
-            },
+            filters::any_message(),
             |update: Update, ctx: Context<MyState>| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
                     let current_count = ctx.state.message_count.fetch_add(1, Ordering::Relaxed) + 1;
@@ -75,12 +71,7 @@ async fn main() {
             },
         )
         .add_handler(
-            |update: &Update| -> bool {
-                matches!(
-                    update.kind,
-                    UpdateKind::Known(KnownUpdate::MessageEvent { .. })
-                )
-            },
+            filters::is_callback(),
             |update: Update, ctx: Context<MyState>| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
                     println!(
