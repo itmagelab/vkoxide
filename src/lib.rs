@@ -1,6 +1,6 @@
 pub mod utils;
 
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin, str::FromStr, sync::Arc};
 
 const API_VERSION: &str = "5.199";
 
@@ -9,6 +9,7 @@ pub struct Client {
     inner: Arc<reqwest::Client>,
 }
 
+#[derive(Clone)]
 pub struct Bot {
     token: Arc<str>,
     group_id: Arc<str>,
@@ -33,11 +34,25 @@ impl Bot {
     }
 }
 
-pub struct Dispatcher {
-    bot: Bot,
+#[derive(Clone)]
+pub struct Context<State = ()> {
+    pub bot: Bot,
+    pub state: Arc<State>,
 }
-pub struct DispatcherBuilder {
+
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub type Filter<E> = Box<dyn Fn(&E) -> bool + Send + Sync>;
+pub type Handler<E, S> = Box<dyn Fn(E, Context<S>) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync>;
+
+pub struct Dispatcher<S = ()> {
     bot: Bot,
+    state: Arc<S>,
+    handlers: Vec<(Filter<Event>, Handler<Event, S>)>,
+}
+pub struct DispatcherBuilder<S = ()> {
+    bot: Bot,
+    state: Arc<S>,
+    handlers: Vec<(Filter<Event>, Handler<Event, S>)>,
 }
 
 use serde::Deserialize;
@@ -144,30 +159,32 @@ pub enum VkError {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Event {
     MessageNew(Message),
     MessageReply(Message),
     Typing(Typing),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub message_id: i64,
     pub user_id: i64,
     pub text: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Typing {
     pub user_id: i64,
 }
 
-impl Dispatcher {
-    pub fn builder(bot: Bot) -> DispatcherBuilder {
-        DispatcherBuilder { bot }
+impl Dispatcher<()> {
+    pub fn builder(bot: Bot) -> DispatcherBuilder<()> {
+        DispatcherBuilder::new(bot)
     }
+}
 
+impl<S: Send + Sync + 'static> Dispatcher<S> {
     pub async fn server(&self) -> Result<LongPollServer, VkError> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
@@ -252,19 +269,48 @@ impl Dispatcher {
                         Event::Typing(Typing { user_id })
                     }
                     UpdateKind::Unknown(value) => {
-                        todo!("Unknown update: {}", value);
+                        println!("Unknown update type: {}", value);
+                        continue;
                     }
                 };
-                println!("Event: {:#?}", event);
+                
+                for (filter, handler) in &self.handlers {
+                    if filter(&event) {
+                        let ctx = Context {
+                            bot: self.bot.clone(),
+                            state: self.state.clone(),
+                        };
+                        handler(event.clone(), ctx).await?;
+                        break;
+                    }
+                }
             }
         }
     }
 }
 
-impl DispatcherBuilder {
-    pub fn build(self) -> Dispatcher {
-        let Self { bot } = self;
-        Dispatcher { bot }
+impl DispatcherBuilder<()> {
+    pub fn new(bot: Bot) -> Self {
+        Self { bot, state: Arc::new(()), handlers: vec![] }
+    }
+}
+
+impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
+    pub fn state<NewState>(self, state: NewState) -> DispatcherBuilder<NewState> {
+        DispatcherBuilder { bot: self.bot, state: Arc::new(state), handlers: vec![] }
+    }
+
+    pub fn add_handler<F, H>(mut self, filter: F, handler: H) -> Self
+    where
+        F: Fn(&Event) -> bool + Send + Sync + 'static,
+        H: Fn(Event, Context<S>) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync + 'static,
+    {
+        self.handlers.push((Box::new(filter), Box::new(handler)));
+        self
+    }
+
+    pub fn build(self) -> Dispatcher<S> {
+        Dispatcher { bot: self.bot, state: self.state, handlers: self.handlers }
     }
 }
 
