@@ -16,13 +16,12 @@ async fn main() {
                     UpdateKind::Known(KnownUpdate::MessageNew { .. })
                 )
             },
-            |update: Update, _ctx: Context<()>| {
+            |update: Update, ctx: Context<()>| {
                 Box::pin(async move {
                     if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-                        println!(
-                            "Новое сообщение от {}: {}",
-                            object.message.from_id, object.message.text
-                        );
+                        let answer = format!("Вы сказали: {}", object.message.text);
+                        println!("Новое сообщение от {}: отвечаем...", object.message.from_id);
+                        ctx.bot.send_message(object.message.from_id, &answer).await?;
                     }
                     Ok(())
                 })

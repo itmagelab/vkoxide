@@ -32,6 +32,32 @@ impl Bot {
             },
         }
     }
+
+    pub async fn send_message(&self, peer_id: i64, message: &str) -> Result<serde_json::Value, VkError> {
+        let mut params = HashMap::new();
+        let peer_id_str = peer_id.to_string();
+        params.insert("peer_id", peer_id_str.as_str());
+        params.insert("message", message);
+        params.insert("random_id", "0");
+        params.insert("v", API_VERSION);
+
+        let url = format!("{}/method/messages.send", self.api_url);
+        let response = self
+            .client
+            .inner
+            .post(url) // Note: messages.send works better with POST just in case message is too long
+            .bearer_auth(self.token.as_ref())
+            .query(&params)
+            .send()
+            .await?
+            .json::<Response<serde_json::Value>>()
+            .await?;
+
+        match response {
+            Response::Ok { response } => Ok(response),
+            Response::Err { error } => Err(VkError::Api(error)),
+        }
+    }
 }
 
 #[derive(Clone)]
