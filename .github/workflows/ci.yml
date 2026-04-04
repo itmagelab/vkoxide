@@ -1,0 +1,28 @@
+name: Rust CI
+
+on:
+  workflow_dispatch: # Позволяет запускать Action вручную из интерфейса GitHub
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Build project
+        run: cargo build --verbose
+
+      - name: Run Unit Tests
+        run: cargo test --verbose

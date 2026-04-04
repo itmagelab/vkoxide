@@ -54,3 +54,28 @@ impl Keyboard {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keyboard_serialization() {
+        let kb = Keyboard::new(false, true).add_row(vec![
+            KeyboardButton {
+                action: Action::Text {
+                    label: "Btn".to_string(),
+                    payload: Some("payload".to_string()),
+                },
+                color: Some(ButtonColor::Primary),
+            }
+        ]);
+
+        let json = serde_json::to_string(&kb).unwrap();
+        // Проверяем, что нет лишних пробелов или неправильных кейсов у enum
+        assert_eq!(
+            json,
+            r#"{"one_time":false,"inline":true,"buttons":[[{"action":{"type":"text","label":"Btn","payload":"payload"},"color":"primary"}]]}"#
+        );
+    }
+}
