@@ -28,34 +28,36 @@ async fn main() {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
                     let current_count = ctx.state.message_count.fetch_add(1, Ordering::Relaxed) + 1;
 
+                    // Fetch user info directly via API
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
+                    // Fetch current conversation info
                     let conv = ctx.bot.get_conversation(object.message.peer_id).await?;
                     let chat_title = conv
                         .chat_settings
-                        .map_or("Ваш диалог".to_string(), |s| s.title);
+                        .map_or("Direct messages".to_string(), |s| s.title);
 
                     let answer = format!(
-                        "{}, вы сказали: {}\nЧат: {}\nВы - {}-й написавший мне человек!",
+                        "{}, you said: {}\nChat: {}\nYou are the {}-th person writing to me!",
                         user.first_name, object.message.text, chat_title, current_count
                     );
 
                     println!(
-                        "Новое сообщение от {} {} в чате '{}'",
+                        "New message from {} {} in chat '{}'",
                         user.first_name, user.last_name, chat_title
                     );
 
                     let keyboard = Keyboard::new(false, true).add_row(vec![
                         KeyboardButton {
                             action: Action::Callback {
-                                label: "Ответить Callback'ом".to_string(),
+                                label: "Answer with Callback".to_string(),
                                 payload: Some("{\"btn\": 1}".to_string()),
                             },
                             color: Some(ButtonColor::Primary),
                         },
                         KeyboardButton {
                             action: Action::Text {
-                                label: "Просто текст".to_string(),
+                                label: "Plain Text".to_string(),
                                 payload: None,
                             },
                             color: Some(ButtonColor::Negative),
@@ -74,13 +76,13 @@ async fn main() {
             |update: Update, ctx: Context<MyState>| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
                     println!(
-                        "Получен callback от юзера {} с payload {:?}",
+                        "Received callback from user {} with payload {:?}",
                         object.user_id, object.payload
                     );
 
                     let event_data = serde_json::json!({
                         "type": "show_snackbar",
-                        "text": "Отправлено через Callback Event!"
+                        "text": "Sent via Callback Event!"
                     });
 
                     ctx.bot
@@ -97,6 +99,6 @@ async fn main() {
         )
         .build();
 
-    println!("Запускаем long-poll dispatcher...");
+    println!("Starting long-poll dispatcher...");
     dispatcher.dispatch().await.unwrap();
 }

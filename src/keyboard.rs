@@ -70,7 +70,7 @@ mod tests {
         }]);
 
         let json = serde_json::to_string(&kb).unwrap();
-        // Проверяем, что нет лишних пробелов или неправильных кейсов у enum
+        // Check that there are no extra spaces or wrong enum cases
         assert_eq!(
             json,
             r#"{"one_time":false,"inline":true,"buttons":[[{"action":{"type":"text","label":"Btn","payload":"payload"},"color":"primary"}]]}"#

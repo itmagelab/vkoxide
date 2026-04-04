@@ -1,7 +1,7 @@
 name: Rust CI
 
 on:
-  workflow_dispatch: # Позволяет запускать Action вручную из интерфейса GitHub
+  workflow_dispatch: # Allows manual workflow execution from the GitHub interface
 
 jobs:
   test:

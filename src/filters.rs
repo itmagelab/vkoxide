@@ -1,7 +1,7 @@
 use crate::{KnownUpdate, Update, UpdateKind};
 use serde_json::Value;
 
-/// Фильтр для текстовой команды (строгое совпадение с текстом или строка, начинающаяся с `prefix `)
+/// Filter for text commands (exact match or string starting with `prefix `)
 pub fn command(prefix: &'static str) -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind {
@@ -14,7 +14,7 @@ pub fn command(prefix: &'static str) -> impl Fn(&Update) -> bool + Send + Sync +
     }
 }
 
-/// Фильтр для кнопки "Начать" (payload содержит {"command":"start"})
+/// Filter for the "Start" button (payload contains {"command":"start"})
 pub fn is_start() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind {
@@ -30,7 +30,7 @@ pub fn is_start() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     }
 }
 
-/// Фильтр для конкретного текста сообщения
+/// Filter for specific message text
 pub fn is_text(expected: &'static str) -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind {
@@ -40,7 +40,7 @@ pub fn is_text(expected: &'static str) -> impl Fn(&Update) -> bool + Send + Sync
     }
 }
 
-/// Фильтр для всех событий `message_event` (callback от inline-кнопок)
+/// Filter for all `message_event` events (callback from inline buttons)
 pub fn is_callback() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
         matches!(
@@ -50,7 +50,7 @@ pub fn is_callback() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     }
 }
 
-/// Базовый фильтр для любого нового сообщения
+/// Base filter for any new message
 pub fn any_message() -> impl Fn(&Update) -> bool + Send + Sync + 'static {
     move |update: &Update| -> bool {
         matches!(
@@ -110,17 +110,17 @@ mod tests {
 
     #[test]
     fn test_is_start_filter() {
-        let update = create_message_update("Начать", Some("{\"command\":\"start\"}"));
+        let update = create_message_update("Start", Some("{\"command\":\"start\"}"));
         assert!(is_start()(&update));
 
-        let wrong_update = create_message_update("Начать", Some("{\"command\":\"stop\"}"));
+        let wrong_update = create_message_update("Start", Some("{\"command\":\"stop\"}"));
         assert!(!is_start()(&wrong_update));
     }
 
     #[test]
     fn test_is_text_filter() {
-        let update = create_message_update("Привет", None);
-        assert!(is_text("Привет")(&update));
-        assert!(!is_text("Пока")(&update));
+        let update = create_message_update("Hello", None);
+        assert!(is_text("Hello")(&update));
+        assert!(!is_text("Bye")(&update));
     }
 }
