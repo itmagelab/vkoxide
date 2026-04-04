@@ -159,7 +159,6 @@ pub enum VkError {
     Http(#[from] reqwest::Error),
 }
 
-
 impl Dispatcher<()> {
     pub fn builder(bot: Bot) -> DispatcherBuilder<()> {
         DispatcherBuilder::new(bot)
@@ -264,7 +263,10 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
     pub fn add_handler<F, H>(mut self, filter: F, handler: H) -> Self
     where
         F: Fn(&Update) -> bool + Send + Sync + 'static,
-        H: Fn(Update, Context<S>) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync + 'static,
+        H: Fn(Update, Context<S>) -> BoxFuture<'static, Result<(), VkError>>
+            + Send
+            + Sync
+            + 'static,
     {
         self.handlers.push((Box::new(filter), Box::new(handler)));
         self

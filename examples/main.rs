@@ -1,4 +1,4 @@
-use vkoxide::{Bot, Context, Dispatcher, Update, UpdateKind, KnownUpdate};
+use vkoxide::{Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind};
 
 #[tokio::main]
 async fn main() {
@@ -10,13 +10,19 @@ async fn main() {
 
     let dispatcher = Dispatcher::builder(bot)
         .add_handler(
-            |update: &Update| -> bool { 
-                matches!(update.kind, UpdateKind::Known(KnownUpdate::MessageNew { .. }))
+            |update: &Update| -> bool {
+                matches!(
+                    update.kind,
+                    UpdateKind::Known(KnownUpdate::MessageNew { .. })
+                )
             },
             |update: Update, _ctx: Context<()>| {
                 Box::pin(async move {
                     if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-                        println!("Новое сообщение от {}: {}", object.message.from_id, object.message.text);
+                        println!(
+                            "Новое сообщение от {}: {}",
+                            object.message.from_id, object.message.text
+                        );
                     }
                     Ok(())
                 })
