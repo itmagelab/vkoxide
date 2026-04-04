@@ -33,10 +33,8 @@ async fn main() {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
                     let current_count = ctx.state.message_count.fetch_add(1, Ordering::Relaxed) + 1;
 
-                    // Получаем информацию о пользователе напрямую
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
-                    // Получаем информацию о текущем чате (беседе)
                     let conv = ctx.bot.get_conversation(object.message.peer_id).await?;
                     let chat_title = conv
                         .chat_settings
@@ -54,15 +52,15 @@ async fn main() {
 
                     let keyboard = Keyboard::new(false, true).add_row(vec![
                         KeyboardButton {
-                            action: Action::Text {
-                                label: "Кнопка 1".to_string(),
+                            action: Action::Callback {
+                                label: "Ответить Callback'ом".to_string(),
                                 payload: Some("{\"btn\": 1}".to_string()),
                             },
                             color: Some(ButtonColor::Primary),
                         },
                         KeyboardButton {
                             action: Action::Text {
-                                label: "Отмена".to_string(),
+                                label: "Просто текст".to_string(),
                                 payload: None,
                             },
                             color: Some(ButtonColor::Negative),
@@ -71,6 +69,37 @@ async fn main() {
 
                     ctx.bot
                         .send_message(object.message.from_id, &answer, Some(&keyboard))
+                        .await?;
+                }
+                Ok(())
+            },
+        )
+        .add_handler(
+            |update: &Update| -> bool {
+                matches!(
+                    update.kind,
+                    UpdateKind::Known(KnownUpdate::MessageEvent { .. })
+                )
+            },
+            |update: Update, ctx: Context<MyState>| async move {
+                if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
+                    println!(
+                        "Получен callback от юзера {} с payload {:?}",
+                        object.user_id, object.payload
+                    );
+
+                    let event_data = serde_json::json!({
+                        "type": "show_snackbar",
+                        "text": "Отправлено через Callback Event!"
+                    });
+
+                    ctx.bot
+                        .send_message_event_answer(
+                            &object.event_id,
+                            object.user_id,
+                            object.peer_id,
+                            Some(event_data),
+                        )
                         .await?;
                 }
                 Ok(())

@@ -134,6 +134,47 @@ impl Bot {
             Response::Err { error } => Err(VkError::Api(error)),
         }
     }
+
+    pub async fn send_message_event_answer(
+        &self,
+        event_id: &str,
+        user_id: i64,
+        peer_id: i64,
+        event_data: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, VkError> {
+        let user_id_str = user_id.to_string();
+        let peer_id_str = peer_id.to_string();
+        
+        let mut params = vec![
+            ("event_id", event_id),
+            ("user_id", user_id_str.as_str()),
+            ("peer_id", peer_id_str.as_str()),
+            ("v", API_VERSION),
+        ];
+
+        let event_data_str;
+        if let Some(da) = event_data {
+            event_data_str = serde_json::to_string(&da).unwrap_or_default();
+            params.push(("event_data", event_data_str.as_str()));
+        }
+
+        let url = format!("{}/method/messages.sendMessageEventAnswer", self.api_url);
+        let response = self
+            .client
+            .inner
+            .post(url)
+            .bearer_auth(self.token.as_ref())
+            .query(&params)
+            .send()
+            .await?
+            .json::<Response<serde_json::Value>>()
+            .await?;
+
+        match response {
+            Response::Ok { response } => Ok(response),
+            Response::Err { error } => Err(VkError::Api(error)),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -202,6 +243,8 @@ pub enum KnownUpdate {
     MessageTypingState { object: TypingStateObject },
     #[serde(rename = "message_read")]
     MessageRead { object: MessageReadObject },
+    #[serde(rename = "message_event")]
+    MessageEvent { object: MessageEventObject },
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -253,6 +296,15 @@ pub struct MessageReadObject {
     pub peer_id: i64,
     pub read_message_id: i64,
     pub conversation_message_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MessageEventObject {
+    pub user_id: i64,
+    pub peer_id: i64,
+    pub event_id: String,
+    pub payload: Option<serde_json::Value>,
+    pub conversation_message_id: i64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
