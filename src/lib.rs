@@ -72,6 +72,39 @@ impl Bot {
             Response::Err { error } => Err(VkError::Api(error)),
         }
     }
+
+    pub async fn get_user(&self, user_id: i64) -> Result<User, VkError> {
+        let user_id_str = user_id.to_string();
+        let params = vec![
+            ("user_ids", user_id_str.as_str()),
+            ("v", API_VERSION),
+        ];
+
+        let url = format!("{}/method/users.get", self.api_url);
+        let response = self
+            .client
+            .inner
+            .post(url)
+            .bearer_auth(self.token.as_ref())
+            .query(&params)
+            .send()
+            .await?
+            .json::<Response<Vec<User>>>()
+            .await?;
+
+        match response {
+            Response::Ok { response } => {
+                response.into_iter().next().ok_or_else(|| {
+                    VkError::Api(ApiError {
+                        error_code: 0,
+                        error_msg: "User not found".to_string(),
+                        request_params: vec![],
+                    })
+                })
+            }
+            Response::Err { error } => Err(VkError::Api(error)),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -147,6 +180,16 @@ pub struct TypingStateObject {
     pub from_id: i64,
     pub to_id: i64,
     pub state: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct User {
+    pub id: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub is_closed: Option<bool>,
+    pub can_access_closed: Option<bool>,
+    pub screen_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

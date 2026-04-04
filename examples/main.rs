@@ -33,14 +33,17 @@ async fn main() {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
                     let current_count = ctx.state.message_count.fetch_add(1, Ordering::Relaxed) + 1;
 
+                    // Получаем информацию о пользователе напрямую
+                    let user = ctx.bot.get_user(object.message.from_id).await?;
+
                     let answer = format!(
-                        "Вы сказали: {}\nВы - {}-й написавший мне человек!",
-                        object.message.text, current_count
+                        "{}, вы сказали: {}\nВы - {}-й написавший мне человек!",
+                        user.first_name, object.message.text, current_count
                     );
 
                     println!(
-                        "Новое сообщение от {}, это уже {} сообщение...",
-                        object.message.from_id, current_count
+                        "Новое сообщение от {} {}, это уже {} сообщение...",
+                        user.first_name, user.last_name, current_count
                     );
 
                     let keyboard = Keyboard::new(false, true).add_row(vec![
