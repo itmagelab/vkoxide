@@ -1,11 +1,12 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use vkoxide::{
     Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters,
     keyboard::{Action, ButtonColor, Keyboard, KeyboardButton},
 };
 
-struct MyState {
-    pub message_count: AtomicUsize,
+pub enum State {
+    Start,
+    Idle,
+    Flow(String),
 }
 
 #[tokio::main]
@@ -16,18 +17,14 @@ async fn main() {
     let group_id = std::env::var("VKOXIDE_GROUP_ID").unwrap();
     let bot = Bot::new(token, group_id);
 
-    let app_state = MyState {
-        message_count: AtomicUsize::new(0),
-    };
+    let app_state = State::Idle;
 
     let dispatcher = Dispatcher::builder(bot)
         .state(app_state)
         .add_handler(
             filters::any_message(),
-            |update: Update, ctx: Context<MyState>| async move {
+            |update: Update, ctx: Context<State>| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-                    let current_count = ctx.state.message_count.fetch_add(1, Ordering::Relaxed) + 1;
-
                     // Fetch user info directly via API
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
@@ -38,8 +35,8 @@ async fn main() {
                         .map_or("Direct messages".to_string(), |s| s.title);
 
                     let answer = format!(
-                        "{}, you said: {}\nChat: {}\nYou are the {}-th person writing to me!",
-                        user.first_name, object.message.text, chat_title, current_count
+                        "{}, you said: {}\nChat: {}\n",
+                        user.first_name, object.message.text, chat_title
                     );
 
                     println!(
@@ -73,7 +70,7 @@ async fn main() {
         )
         .add_handler(
             filters::is_callback(),
-            |update: Update, ctx: Context<MyState>| async move {
+            |update: Update, ctx: Context<State>| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
                     println!(
                         "Received callback from user {} with payload {:?}",
