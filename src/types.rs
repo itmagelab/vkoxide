@@ -27,8 +27,8 @@ pub enum VkError {
     Api(ApiError),
     #[error("HTTP request error: {0}")]
     Http(#[from] reqwest::Error),
-    #[error("Shutdown error")]
-    Shutdown,
+    #[error("Shutdown send error")]
+    Send(#[from] tokio::sync::mpsc::error::SendError<()>),
 }
 
 #[derive(Debug, Deserialize)]

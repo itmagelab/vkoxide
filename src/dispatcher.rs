@@ -51,7 +51,7 @@ pub struct ShutdownToken {
 
 impl ShutdownToken {
     pub fn shutdown(self) -> Result<(), VkError> {
-        self.tx.send(()).map_err(|_| VkError::Shutdown)
+        Ok(self.tx.send(())?)
     }
 }
 
