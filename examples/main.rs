@@ -1,12 +1,15 @@
 use vkoxide::{
     Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters,
-    keyboard::{Action, ButtonColor, Keyboard, KeyboardButton},
 };
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub enum State {
-    Start,
     Idle,
-    Flow(String),
+}
+
+// Mock database to demonstrate multiple dependencies
+pub struct Database {
+    pub call_count: AtomicU32,
 }
 
 #[tokio::main]
@@ -17,81 +20,38 @@ async fn main() {
     let group_id = std::env::var("VKOXIDE_GROUP_ID").unwrap();
     let bot = Bot::new(token, group_id);
 
-    let app_state = State::Idle;
+    let db = Database {
+        call_count: AtomicU32::new(0),
+    };
 
     let mut builder = Dispatcher::builder(bot);
     let shutdown_token = builder.shutdown_token();
 
     let dispatcher = builder
-        .state(app_state)
+        .inject(State::Idle)
+        .inject(db)
         .add_handler(
             filters::any_message(),
-            |update: Update, ctx: Context<State>| async move {
+            |update: Update, ctx: Context| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
+                    let db = ctx.get::<Database>().unwrap();
+                    let state = ctx.get::<State>().unwrap();
+
+                    db.call_count.fetch_add(1, Ordering::SeqCst);
+                    let count = db.call_count.load(Ordering::SeqCst);
+
                     // Fetch user info directly via API
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
-                    // Fetch current conversation info
-                    let conv = ctx.bot.get_conversation(object.message.peer_id).await?;
-                    let chat_title = conv
-                        .chat_settings
-                        .map_or("Direct messages".to_string(), |s| s.title);
-
-                    let answer = format!(
-                        "{}, you said: {}\nChat: {}\n",
-                        user.first_name, object.message.text, chat_title
-                    );
-
-                    println!(
-                        "New message from {} {} in chat '{}'",
-                        user.first_name, user.last_name, chat_title
-                    );
-
-                    let keyboard = Keyboard::new(false, true).add_row(vec![
-                        KeyboardButton {
-                            action: Action::Callback {
-                                label: "Answer with Callback".to_string(),
-                                payload: Some("{\"btn\": 1}".to_string()),
-                            },
-                            color: Some(ButtonColor::Primary),
-                        },
-                        KeyboardButton {
-                            action: Action::Text {
-                                label: "Plain Text".to_string(),
-                                payload: None,
-                            },
-                            color: Some(ButtonColor::Negative),
-                        },
-                    ]);
+                    let msg = match *state {
+                        State::Idle => format!(
+                            "Hello {}, you are message #{}!",
+                            user.first_name, count
+                        ),
+                    };
 
                     ctx.bot
-                        .send_message(object.message.from_id, &answer, Some(&keyboard))
-                        .await?;
-                }
-                Ok(())
-            },
-        )
-        .add_handler(
-            filters::is_callback(),
-            |update: Update, ctx: Context<State>| async move {
-                if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
-                    println!(
-                        "Received callback from user {} with payload {:?}",
-                        object.user_id, object.payload
-                    );
-
-                    let event_data = serde_json::json!({
-                        "type": "show_snackbar",
-                        "text": "Sent via Callback Event!"
-                    });
-
-                    ctx.bot
-                        .send_message_event_answer(
-                            &object.event_id,
-                            object.user_id,
-                            object.peer_id,
-                            Some(event_data),
-                        )
+                        .send_message(object.message.peer_id, &msg, None)
                         .await?;
                 }
                 Ok(())
@@ -106,7 +66,7 @@ async fn main() {
         shutdown_token.shutdown().unwrap();
     });
 
-    println!("Starting long-poll dispatcher...");
+    println!("Starting long-poll dispatcher with DI...");
     dispatcher.dispatch().await.unwrap();
     println!("Dispatcher stopped.");
 }
