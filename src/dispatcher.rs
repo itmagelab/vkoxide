@@ -1,18 +1,48 @@
 use crate::bot::{API_VERSION, Bot};
 use crate::types::*;
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
-#[derive(Clone)]
-pub struct Context<State = ()> {
+#[derive(Default, Clone)]
+pub struct DependencyMap {
+    map: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
+}
+
+impl DependencyMap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert<T: Send + Sync + 'static>(&mut self, data: T) {
+        self.map.insert(TypeId::of::<T>(), Arc::new(data));
+    }
+
+    pub fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.map
+            .get(&TypeId::of::<T>())
+            .and_then(|any| any.clone().downcast::<T>().ok())
+    }
+}
+
+pub struct Context {
     pub bot: Bot,
-    pub state: Arc<State>,
+    pub(crate) data: Arc<DependencyMap>,
+}
+
+impl Context {
+    pub fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.data.get::<T>()
+    }
 }
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub type Filter<U> = Box<dyn Fn(&U) -> bool + Send + Sync>;
-pub type Handler<U, S> =
-    Box<dyn Fn(U, Context<S>) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync>;
+pub type Handler<U> =
+    Box<dyn Fn(U, Context) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct ShutdownToken {
@@ -25,27 +55,27 @@ impl ShutdownToken {
     }
 }
 
-pub struct Dispatcher<S = ()> {
+pub struct Dispatcher {
     bot: Bot,
-    state: Arc<S>,
-    handlers: Vec<(Filter<Update>, Handler<Update, S>)>,
+    data: Arc<DependencyMap>,
+    handlers: Vec<(Filter<Update>, Handler<Update>)>,
     shutdown: Option<mpsc::UnboundedReceiver<()>>,
 }
 
-pub struct DispatcherBuilder<S = ()> {
+pub struct DispatcherBuilder {
     bot: Bot,
-    state: Arc<S>,
-    handlers: Vec<(Filter<Update>, Handler<Update, S>)>,
+    data: DependencyMap,
+    handlers: Vec<(Filter<Update>, Handler<Update>)>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
-impl Dispatcher<()> {
-    pub fn builder(bot: Bot) -> DispatcherBuilder<()> {
+impl Dispatcher {
+    pub fn builder(bot: Bot) -> DispatcherBuilder {
         DispatcherBuilder::new(bot)
     }
 }
 
-impl<S: Send + Sync + 'static> Dispatcher<S> {
+impl Dispatcher {
     pub async fn server(&self) -> Result<LongPollServer, VkError> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
@@ -106,14 +136,13 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
             ts = response.ts.to_string();
 
             for update in response.updates {
-                println!("Update: {:#?}", update);
                 let update_clone = update.clone();
 
                 for (filter, handler) in &self.handlers {
                     if filter(&update_clone) {
                         let ctx = Context {
                             bot: self.bot.clone(),
-                            state: self.state.clone(),
+                            data: self.data.clone(),
                         };
                         handler(update_clone.clone(), ctx).await?;
                         break;
@@ -126,25 +155,19 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
     }
 }
 
-impl DispatcherBuilder<()> {
+impl DispatcherBuilder {
     pub fn new(bot: Bot) -> Self {
         Self {
             bot,
-            state: Arc::new(()),
+            data: DependencyMap::new(),
             handlers: vec![],
             shutdown: None,
         }
     }
-}
 
-impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
-    pub fn state<NewState>(self, state: NewState) -> DispatcherBuilder<NewState> {
-        DispatcherBuilder {
-            bot: self.bot,
-            state: Arc::new(state),
-            handlers: vec![],
-            shutdown: self.shutdown,
-        }
+    pub fn inject<T: Send + Sync + 'static>(mut self, data: T) -> Self {
+        self.data.insert(data);
+        self
     }
 
     pub fn shutdown_token(&mut self) -> ShutdownToken {
@@ -156,7 +179,7 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
     pub fn add_handler<F, H, Fut>(mut self, filter: F, handler: H) -> Self
     where
         F: Fn(&Update) -> bool + Send + Sync + 'static,
-        H: Fn(Update, Context<S>) -> Fut + Send + Sync + 'static,
+        H: Fn(Update, Context) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), VkError>> + Send + 'static,
     {
         let boxed_handler = Box::new(move |update, ctx| {
@@ -166,10 +189,10 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
         self
     }
 
-    pub fn build(self) -> Dispatcher<S> {
+    pub fn build(self) -> Dispatcher {
         Dispatcher {
             bot: self.bot,
-            state: self.state,
+            data: Arc::new(self.data),
             handlers: self.handlers,
             shutdown: self.shutdown.map(|(_, rx)| rx),
         }
