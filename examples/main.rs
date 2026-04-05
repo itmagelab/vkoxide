@@ -1,7 +1,5 @@
-use vkoxide::{
-    Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters,
-};
 use std::sync::atomic::{AtomicU32, Ordering};
+use vkoxide::{Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters};
 
 pub enum State {
     Idle,
@@ -44,10 +42,9 @@ async fn main() {
                     let user = ctx.bot.get_user(object.message.from_id).await?;
 
                     let msg = match *state {
-                        State::Idle => format!(
-                            "Hello {}, you are message #{}!",
-                            user.first_name, count
-                        ),
+                        State::Idle => {
+                            format!("Hello {}, you are message #{}!", user.first_name, count)
+                        }
                     };
 
                     ctx.bot
