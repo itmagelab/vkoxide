@@ -19,7 +19,10 @@ async fn main() {
 
     let app_state = State::Idle;
 
-    let dispatcher = Dispatcher::builder(bot)
+    let mut builder = Dispatcher::builder(bot);
+    let shutdown_token = builder.shutdown_token();
+
+    let dispatcher = builder
         .state(app_state)
         .add_handler(
             filters::any_message(),
@@ -96,6 +99,14 @@ async fn main() {
         )
         .build();
 
+    // Graceful shutdown on Ctrl+C
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        println!("\nShutdown signal received. Gracefully stopping...");
+        shutdown_token.shutdown().unwrap();
+    });
+
     println!("Starting long-poll dispatcher...");
     dispatcher.dispatch().await.unwrap();
+    println!("Dispatcher stopped.");
 }

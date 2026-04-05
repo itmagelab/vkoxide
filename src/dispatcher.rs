@@ -1,6 +1,7 @@
 use crate::bot::{API_VERSION, Bot};
 use crate::types::*;
 use std::{future::Future, pin::Pin, sync::Arc};
+use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub struct Context<State = ()> {
@@ -13,16 +14,29 @@ pub type Filter<U> = Box<dyn Fn(&U) -> bool + Send + Sync>;
 pub type Handler<U, S> =
     Box<dyn Fn(U, Context<S>) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync>;
 
+#[derive(Clone)]
+pub struct ShutdownToken {
+    tx: mpsc::UnboundedSender<()>,
+}
+
+impl ShutdownToken {
+    pub fn shutdown(self) -> Result<(), ()> {
+        self.tx.send(()).map_err(|_| ())
+    }
+}
+
 pub struct Dispatcher<S = ()> {
     bot: Bot,
     state: Arc<S>,
     handlers: Vec<(Filter<Update>, Handler<Update, S>)>,
+    shutdown: Option<mpsc::UnboundedReceiver<()>>,
 }
 
 pub struct DispatcherBuilder<S = ()> {
     bot: Bot,
     state: Arc<S>,
     handlers: Vec<(Filter<Update>, Handler<Update, S>)>,
+    shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
 impl Dispatcher<()> {
@@ -57,10 +71,11 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
         }
     }
 
-    pub async fn dispatch(self) -> Result<(), VkError> {
+    pub async fn dispatch(mut self) -> Result<(), VkError> {
         let server = self.server().await?;
 
         let mut ts = server.ts;
+        let mut shutdown = self.shutdown.take();
 
         loop {
             let ts_string = ts.to_string();
@@ -73,16 +88,20 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
 
             let url = server.server.to_string();
 
-            let response = self
-                .bot
-                .client
-                .inner
-                .get(url)
-                .query(&params)
-                .send()
-                .await?
-                .json::<LongPollResponse>()
-                .await?;
+            let response = tokio::select! {
+                _ = async {
+                    if let Some(rx) = &mut shutdown {
+                        rx.recv().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
+                    break;
+                }
+                res = self.bot.client.inner.get(url).query(params).send() => {
+                    res?.json::<LongPollResponse>().await?
+                }
+            };
 
             ts = response.ts.to_string();
 
@@ -102,6 +121,8 @@ impl<S: Send + Sync + 'static> Dispatcher<S> {
                 }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -111,6 +132,7 @@ impl DispatcherBuilder<()> {
             bot,
             state: Arc::new(()),
             handlers: vec![],
+            shutdown: None,
         }
     }
 }
@@ -121,7 +143,14 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
             bot: self.bot,
             state: Arc::new(state),
             handlers: vec![],
+            shutdown: self.shutdown,
         }
+    }
+
+    pub fn shutdown_token(&mut self) -> ShutdownToken {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.shutdown = Some((tx.clone(), rx));
+        ShutdownToken { tx }
     }
 
     pub fn add_handler<F, H, Fut>(mut self, filter: F, handler: H) -> Self
@@ -142,6 +171,7 @@ impl<S: Send + Sync + 'static> DispatcherBuilder<S> {
             bot: self.bot,
             state: self.state,
             handlers: self.handlers,
+            shutdown: self.shutdown.map(|(_, rx)| rx),
         }
     }
 }
