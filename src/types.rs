@@ -27,6 +27,8 @@ pub enum VkError {
     Api(ApiError),
     #[error("HTTP request error: {0}")]
     Http(#[from] reqwest::Error),
+    #[error("Shutdown error")]
+    Shutdown,
 }
 
 #[derive(Debug, Deserialize)]
