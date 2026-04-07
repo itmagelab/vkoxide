@@ -6,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing;
 
 #[derive(Default, Clone)]
 pub struct DependencyMap {
@@ -39,10 +40,11 @@ impl Context {
     }
 }
 
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub type Filter<U> = Box<dyn Fn(&U) -> bool + Send + Sync>;
 pub type Handler<U> =
-    Box<dyn Fn(U, Context) -> BoxFuture<'static, Result<(), VkError>> + Send + Sync>;
+    Box<dyn Fn(U, Context) -> BoxFuture<'static, Result<(), BoxError>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct ShutdownToken {
@@ -144,7 +146,9 @@ impl Dispatcher {
                             bot: self.bot.clone(),
                             data: self.data.clone(),
                         };
-                        handler(update_clone.clone(), ctx).await?;
+                        if let Err(e) = handler(update_clone.clone(), ctx).await {
+                            tracing::error!("Handler error: {}", e);
+                        }
                         break;
                     }
                 }
@@ -176,14 +180,17 @@ impl DispatcherBuilder {
         ShutdownToken { tx }
     }
 
-    pub fn add_handler<F, H, Fut>(mut self, filter: F, handler: H) -> Self
+    pub fn add_handler<F, H, Fut, E>(mut self, filter: F, handler: H) -> Self
     where
         F: Fn(&Update) -> bool + Send + Sync + 'static,
         H: Fn(Update, Context) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<(), VkError>> + Send + 'static,
+        Fut: Future<Output = Result<(), E>> + Send + 'static,
+        E: Into<BoxError> + 'static,
     {
         let boxed_handler = Box::new(move |update, ctx| {
-            Box::pin(handler(update, ctx)) as BoxFuture<'static, Result<(), VkError>>
+            let fut = handler(update, ctx);
+            Box::pin(async move { fut.await.map_err(|e| e.into()) })
+                as BoxFuture<'static, Result<(), BoxError>>
         });
         self.handlers.push((Box::new(filter), boxed_handler));
         self

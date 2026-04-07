@@ -32,8 +32,8 @@ async fn main() {
             filters::any_message(),
             |update: Update, ctx: Context| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-                    let db = ctx.get::<Database>().unwrap();
-                    let state = ctx.get::<State>().unwrap();
+                    let db = ctx.get::<Database>().ok_or_else(|| anyhow::anyhow!("DB missing"))?;
+                    let state = ctx.get::<State>().ok_or_else(|| anyhow::anyhow!("State missing"))?;
 
                     db.call_count.fetch_add(1, Ordering::SeqCst);
                     let count = db.call_count.load(Ordering::SeqCst);
@@ -51,7 +51,7 @@ async fn main() {
                         .send_message(object.message.peer_id, &msg, None)
                         .await?;
                 }
-                Ok(())
+                anyhow::Ok(())
             },
         )
         .build();
