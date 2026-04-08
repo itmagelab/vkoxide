@@ -40,7 +40,7 @@ impl Context {
     }
 }
 
-pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub type Filter<U> = Box<dyn Fn(&U) -> bool + Send + Sync>;
 pub type Handler<U> =
