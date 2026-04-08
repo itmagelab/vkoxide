@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::dispatcher::BoxError;
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Response<T> {
@@ -59,6 +61,19 @@ pub struct Update {
 pub enum UpdateKind {
     Known(KnownUpdate),
     Unknown(Value),
+}
+
+impl TryFrom<UpdateKind> for KnownUpdate {
+    type Error = BoxError;
+
+    fn try_from(value: UpdateKind) -> Result<Self, Self::Error> {
+        match value {
+            UpdateKind::Known(k) => Ok(k),
+            UpdateKind::Unknown(u) => {
+                Err(anyhow::anyhow!("Unexpected update payload: {:?}", u).into())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
