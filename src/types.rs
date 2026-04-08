@@ -1,8 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::dispatcher::BoxError;
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Response<T> {
@@ -31,6 +29,8 @@ pub enum VkError {
     Http(#[from] reqwest::Error),
     #[error("Shutdown send error")]
     Send(#[from] tokio::sync::mpsc::error::SendError<()>),
+    #[error("Unknown update received: {0:?}")]
+    UnknownUpdate(serde_json::Value),
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,14 +64,12 @@ pub enum UpdateKind {
 }
 
 impl TryFrom<UpdateKind> for KnownUpdate {
-    type Error = BoxError;
+    type Error = VkError;
 
     fn try_from(value: UpdateKind) -> Result<Self, Self::Error> {
         match value {
             UpdateKind::Known(k) => Ok(k),
-            UpdateKind::Unknown(u) => {
-                Err(anyhow::anyhow!("Unexpected update payload: {:?}", u).into())
-            }
+            UpdateKind::Unknown(u) => Err(VkError::UnknownUpdate(u)),
         }
     }
 }
