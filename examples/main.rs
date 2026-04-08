@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicU32, Ordering};
-use vkoxide::{Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filters};
+use vkoxide::{Bot, Context, Dispatcher, KnownUpdate, Update, UpdateKind, filter};
 
 pub enum State {
     Idle,
@@ -29,11 +29,15 @@ async fn main() {
         .inject(State::Idle)
         .inject(db)
         .add_handler(
-            filters::any_message(),
+            filter::any_message(),
             |update: Update, ctx: Context| async move {
                 if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-                    let db = ctx.get::<Database>().ok_or_else(|| anyhow::anyhow!("DB missing"))?;
-                    let state = ctx.get::<State>().ok_or_else(|| anyhow::anyhow!("State missing"))?;
+                    let db = ctx
+                        .get::<Database>()
+                        .ok_or_else(|| anyhow::anyhow!("DB missing"))?;
+                    let state = ctx
+                        .get::<State>()
+                        .ok_or_else(|| anyhow::anyhow!("State missing"))?;
 
                     db.call_count.fetch_add(1, Ordering::SeqCst);
                     let count = db.call_count.load(Ordering::SeqCst);

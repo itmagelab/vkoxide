@@ -1,6 +1,6 @@
 pub mod bot;
 pub mod dispatcher;
-pub mod filters;
+pub mod filter;
 pub mod keyboard;
 pub mod prelude;
 pub mod types;

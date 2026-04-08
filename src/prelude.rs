@@ -3,6 +3,6 @@
 
 pub use crate::bot::Bot;
 pub use crate::dispatcher::{Context, Dispatcher, DispatcherBuilder, ShutdownToken};
-pub use crate::filters;
+pub use crate::filter;
 pub use crate::keyboard::{Action, ButtonColor, Keyboard, KeyboardButton};
 pub use crate::types::{KnownUpdate, Update, UpdateKind, VkError};
