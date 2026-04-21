@@ -1,50 +1,12 @@
 use crate::bot::{API_VERSION, Bot};
 use crate::types::*;
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
+pub use dptree::di::{DependencyMap, Injectable};
+pub use dptree::prelude::*;
+pub use std::ops::ControlFlow;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing;
-
-#[derive(Default, Clone)]
-pub struct DependencyMap {
-    map: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
-}
-
-impl DependencyMap {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn insert<T: Send + Sync + 'static>(&mut self, data: T) {
-        self.map.insert(TypeId::of::<T>(), Arc::new(data));
-    }
-
-    pub fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
-        self.map
-            .get(&TypeId::of::<T>())
-            .and_then(|any| any.clone().downcast::<T>().ok())
-    }
-}
-
-pub struct Context {
-    pub bot: Bot,
-    pub(crate) data: Arc<DependencyMap>,
-}
-
-impl Context {
-    pub fn get<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
-        self.data.get::<T>()
-    }
-}
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-pub type Filter<U> = Box<dyn Fn(&U) -> bool + Send + Sync>;
-pub type Handler<U> =
-    Box<dyn Fn(U, Context) -> BoxFuture<'static, Result<(), BoxError>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct ShutdownToken {
@@ -57,17 +19,19 @@ impl ShutdownToken {
     }
 }
 
+pub type HandlerResult = Result<ControlFlow<()>, BoxError>;
+
 pub struct Dispatcher {
     bot: Bot,
-    data: Arc<DependencyMap>,
-    handlers: Vec<(Filter<Update>, Handler<Update>)>,
+    data: DependencyMap,
+    handler: Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>,
     shutdown: Option<mpsc::UnboundedReceiver<()>>,
 }
 
 pub struct DispatcherBuilder {
     bot: Bot,
     data: DependencyMap,
-    handlers: Vec<(Filter<Update>, Handler<Update>)>,
+    handler: Option<Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
@@ -75,9 +39,7 @@ impl Dispatcher {
     pub fn builder(bot: Bot) -> DispatcherBuilder {
         DispatcherBuilder::new(bot)
     }
-}
 
-impl Dispatcher {
     pub async fn server(&self) -> Result<LongPollServer, VkError> {
         let token = &self.bot.token;
         let group_id = self.bot.group_id.to_string();
@@ -138,18 +100,17 @@ impl Dispatcher {
             ts = response.ts.to_string();
 
             for update in response.updates {
-                let update_clone = update.clone();
+                let mut deps = self.data.clone();
+                deps.insert(update.clone());
+                deps.insert(self.bot.clone());
 
-                for (filter, handler) in &self.handlers {
-                    if filter(&update_clone) {
-                        let ctx = Context {
-                            bot: self.bot.clone(),
-                            data: self.data.clone(),
-                        };
-                        if let Err(e) = handler(update_clone.clone(), ctx).await {
-                            tracing::error!("Handler error: {}", e);
-                        }
-                        break;
+                match self.handler.dispatch(deps).await {
+                    ControlFlow::Break(Ok(_)) => {}
+                    ControlFlow::Break(Err(e)) => {
+                        tracing::error!("Handler error: {}", e);
+                    }
+                    ControlFlow::Continue(_) => {
+                        // Not handled by any branch
                     }
                 }
             }
@@ -164,7 +125,7 @@ impl DispatcherBuilder {
         Self {
             bot,
             data: DependencyMap::new(),
-            handlers: vec![],
+            handler: None,
             shutdown: None,
         }
     }
@@ -180,27 +141,21 @@ impl DispatcherBuilder {
         ShutdownToken { tx }
     }
 
-    pub fn add_handler<F, H, Fut, E>(mut self, filter: F, handler: H) -> Self
-    where
-        F: Fn(&Update) -> bool + Send + Sync + 'static,
-        H: Fn(Update, Context) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<(), E>> + Send + 'static,
-        E: Into<BoxError> + 'static,
-    {
-        let boxed_handler = Box::new(move |update, ctx| {
-            let fut = handler(update, ctx);
-            Box::pin(async move { fut.await.map_err(|e| e.into()) })
-                as BoxFuture<'static, Result<(), BoxError>>
-        });
-        self.handlers.push((Box::new(filter), boxed_handler));
+    pub fn handler(
+        mut self,
+        handler: dptree::Handler<'static, DependencyMap, HandlerResult>,
+    ) -> Self {
+        self.handler = Some(Arc::new(handler));
         self
     }
 
     pub fn build(self) -> Dispatcher {
         Dispatcher {
             bot: self.bot,
-            data: Arc::new(self.data),
-            handlers: self.handlers,
+            data: self.data,
+            handler: self.handler.unwrap_or_else(|| {
+                Arc::new(dptree::entry().endpoint(|| async { Ok(ControlFlow::<()>::Continue(())) }))
+            }),
             shutdown: self.shutdown.map(|(_, rx)| rx),
         }
     }
