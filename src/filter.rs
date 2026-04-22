@@ -5,7 +5,7 @@ use dptree::prelude::*;
 
 /// Extraction filter for any new message
 pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
-    dptree::filter_map(|update: Update| Some(update)).filter_map(|update: Update| {
+    dptree::filter_map(|update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             Some(object)
         } else {
@@ -16,7 +16,7 @@ pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
 
 /// Extraction filter for callback events
 pub fn is_callback() -> Handler<'static, DependencyMap, HandlerResult> {
-    dptree::filter_map(|update: Update| Some(update)).filter_map(|update: Update| {
+    dptree::filter_map(|update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
             Some(object)
         } else {
