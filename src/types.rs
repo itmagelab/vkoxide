@@ -173,3 +173,8 @@ pub struct MessageObject {
     pub payload: Option<String>,
     pub version: i64,
 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub enum Command {
+    Start,
+}
