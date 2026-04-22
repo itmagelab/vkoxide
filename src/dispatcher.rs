@@ -6,8 +6,6 @@ pub use std::ops::ControlFlow;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
-
 #[derive(Clone)]
 pub struct ShutdownToken {
     tx: mpsc::UnboundedSender<()>,
@@ -19,6 +17,7 @@ impl ShutdownToken {
     }
 }
 
+pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub type HandlerResult = Result<ControlFlow<()>, BoxError>;
 
 pub struct Dispatcher {
