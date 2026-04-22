@@ -2,7 +2,6 @@ use crate::bot::{API_VERSION, Bot};
 use crate::types::*;
 pub use dptree::di::{DependencyMap, Injectable};
 pub use dptree::prelude::*;
-pub use std::ops::ControlFlow;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -18,7 +17,7 @@ impl ShutdownToken {
 }
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
-pub type HandlerResult = Result<ControlFlow<()>, BoxError>;
+pub type HandlerResult = Result<(), BoxError>;
 
 pub struct Dispatcher {
     bot: Bot,
@@ -152,9 +151,9 @@ impl DispatcherBuilder {
         Dispatcher {
             bot: self.bot,
             data: self.data,
-            handler: self.handler.unwrap_or_else(|| {
-                Arc::new(dptree::entry().endpoint(|| async { Ok(ControlFlow::<()>::Continue(())) }))
-            }),
+            handler: self
+                .handler
+                .unwrap_or_else(|| Arc::new(dptree::entry().endpoint(|| async { Ok(()) }))),
             shutdown: self.shutdown.map(|(_, rx)| rx),
         }
     }

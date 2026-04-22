@@ -72,5 +72,5 @@ async fn handle_message(
 
     bot.send_message(obj.message.peer_id, &msg, None).await?;
 
-    Ok(ControlFlow::Break(()))
+    Ok(())
 }
