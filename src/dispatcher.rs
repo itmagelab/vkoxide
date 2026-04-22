@@ -23,7 +23,7 @@ pub struct Dispatcher {
     bot: Bot,
     deps: DependencyMap,
     handler: Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>,
-    shutdown: Option<mpsc::UnboundedReceiver<()>>,
+    shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
 pub struct DispatcherBuilder {
@@ -82,7 +82,7 @@ impl Dispatcher {
 
             let response = tokio::select! {
                 _ = async {
-                    if let Some(rx) = &mut shutdown {
+                    if let Some((_, rx)) = &mut shutdown {
                         rx.recv().await;
                     } else {
                         std::future::pending::<()>().await;
@@ -154,7 +154,7 @@ impl DispatcherBuilder {
             handler: self
                 .handler
                 .unwrap_or_else(|| Arc::new(dptree::entry().endpoint(|| async { Ok(()) }))),
-            shutdown: self.shutdown.map(|(_, rx)| rx),
+            shutdown: self.shutdown,
         }
     }
 }
