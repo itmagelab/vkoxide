@@ -1,7 +1,7 @@
-use crate::types::{KnownUpdate, Update, UpdateKind, MessageNewObject};
 use crate::dispatcher::HandlerResult;
-use dptree::prelude::*;
+use crate::types::{KnownUpdate, MessageNewObject, Update, UpdateKind};
 use dptree::di::DependencyMap;
+use dptree::prelude::*;
 
 /// Extraction filter for any new message
 pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
@@ -34,8 +34,8 @@ pub fn command(prefix: &'static str) -> impl Fn(&MessageNewObject) -> bool + Sen
 }
 
 /// Filter for specific message text
-pub fn is_text(expected: &'static str) -> impl Fn(&MessageNewObject) -> bool + Send + Sync + 'static {
-    move |obj: &MessageNewObject| -> bool {
-        obj.message.text == expected
-    }
+pub fn is_text(
+    expected: &'static str,
+) -> impl Fn(&MessageNewObject) -> bool + Send + Sync + 'static {
+    move |obj: &MessageNewObject| -> bool { obj.message.text == expected }
 }
