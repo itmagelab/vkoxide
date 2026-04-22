@@ -21,14 +21,14 @@ pub type HandlerResult = Result<(), BoxError>;
 
 pub struct Dispatcher {
     bot: Bot,
-    data: DependencyMap,
+    deps: DependencyMap,
     handler: Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>,
     shutdown: Option<mpsc::UnboundedReceiver<()>>,
 }
 
 pub struct DispatcherBuilder {
     bot: Bot,
-    data: DependencyMap,
+    deps: DependencyMap,
     handler: Option<Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
@@ -98,7 +98,7 @@ impl Dispatcher {
             ts = response.ts.to_string();
 
             for update in response.updates {
-                let mut deps = self.data.clone();
+                let mut deps = self.deps.clone();
                 deps.insert(update.clone());
                 deps.insert(self.bot.clone());
 
@@ -122,14 +122,14 @@ impl DispatcherBuilder {
     pub fn new(bot: Bot) -> Self {
         Self {
             bot,
-            data: DependencyMap::new(),
+            deps: DependencyMap::new(),
             handler: None,
             shutdown: None,
         }
     }
 
     pub fn inject<T: Send + Sync + 'static>(mut self, data: T) -> Self {
-        self.data.insert(data);
+        self.deps.insert(data);
         self
     }
 
@@ -150,7 +150,7 @@ impl DispatcherBuilder {
     pub fn build(self) -> Dispatcher {
         Dispatcher {
             bot: self.bot,
-            data: self.data,
+            deps: self.deps,
             handler: self
                 .handler
                 .unwrap_or_else(|| Arc::new(dptree::entry().endpoint(|| async { Ok(()) }))),
