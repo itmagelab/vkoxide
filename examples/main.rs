@@ -1,9 +1,7 @@
 use dptree::di::DependencyMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use vkoxide::dispatcher::HandlerResult;
-use vkoxide::types::MessageNewObject;
-use vkoxide::{Bot, Dispatcher, dptree, filter};
+use vkoxide::prelude::*;
 
 #[derive(Clone, Copy)]
 pub enum State {
@@ -49,7 +47,9 @@ async fn main() {
 }
 
 fn schema() -> dptree::Handler<'static, DependencyMap, HandlerResult> {
-    dptree::entry().branch(filter::any_message().endpoint(handle_message))
+    dptree::entry()
+        .branch(filter::is_start().endpoint(handle_message))
+        .branch(filter::any_message().endpoint(handle_message))
 }
 
 async fn handle_message(

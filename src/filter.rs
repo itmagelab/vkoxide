@@ -1,5 +1,5 @@
 use crate::dispatcher::HandlerResult;
-use crate::types::{Command, KnownUpdate, MessageNewObject, Update, UpdateKind};
+use crate::types::{KnownUpdate, MessageNewObject, Update, UpdateKind};
 use dptree::di::DependencyMap;
 use dptree::prelude::*;
 use serde_json::Value;
@@ -17,13 +17,16 @@ pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
 
 pub fn is_start() -> Handler<'static, DependencyMap, HandlerResult> {
     dptree::filter_map(|update: Update| {
-        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = &update.kind
-            && let Some(payload_str) = &object.message.payload
-            && let Ok(Value::Object(map)) = serde_json::from_str::<Value>(payload_str)
-            && let Some(Value::String(cmd)) = map.get("command")
-            && cmd == "start"
-        {
-            return Some(Command::Start);
+        match update.kind {
+            UpdateKind::Known(KnownUpdate::MessageNew { object })
+                if let Some(payload_str) = &object.message.payload
+                    && let Ok(Value::Object(map)) = serde_json::from_str::<Value>(payload_str)
+                    && let Some(Value::String(cmd)) = map.get("command")
+                    && cmd == "start" =>
+            {
+                return Some(object);
+            }
+            _ => (),
         };
         None
     })
