@@ -48,8 +48,91 @@ async fn main() {
 
 fn schema() -> dptree::Handler<'static, DependencyMap, HandlerResult> {
     dptree::entry()
-        .branch(filter::is_start().endpoint(handle_message))
+        // Handle the initial "Start" button press (payload command)
+        .branch(filter::is_start().endpoint(handle_start))
+        // Handle "/help" command
+        .branch(filter::command("/help").endpoint(handle_help))
+        // Handle exact text "hello"
+        .branch(filter::is_text("hello").endpoint(handle_hello))
+        // Handle inline callback button presses
+        .branch(filter::is_callback().endpoint(handle_callback))
+        // Fallback: handle any other message
         .branch(filter::any_message().endpoint(handle_message))
+}
+
+/// Build an inline keyboard with a "Show info" callback button
+fn info_keyboard() -> Keyboard {
+    Keyboard::new(false, true).add_row(vec![KeyboardButton {
+        action: Action::Callback {
+            label: "Show info".to_string(),
+            payload: Some(r#"{"action":"info"}"#.to_string()),
+        },
+        color: None,
+    }])
+}
+
+/// Build a reply keyboard with text buttons
+fn menu_keyboard() -> Keyboard {
+    Keyboard::new(true, false).add_row(vec![
+        KeyboardButton {
+            action: Action::Text {
+                label: "Help".to_string(),
+                payload: Some(r#"{"command":"help"}"#.to_string()),
+            },
+            color: Some(ButtonColor::Primary),
+        },
+        KeyboardButton {
+            action: Action::Text {
+                label: "Hello".to_string(),
+                payload: None,
+            },
+            color: Some(ButtonColor::Secondary),
+        },
+    ])
+}
+
+async fn handle_start(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    let kb = menu_keyboard();
+    bot.send_message(
+        obj.message.peer_id,
+        "Welcome! Use the buttons below or type /help.",
+        Some(&kb),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn handle_help(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    let kb = info_keyboard();
+    bot.send_message(
+        obj.message.peer_id,
+        "Available commands:\n/help — show this message\nhello — greet the bot\n\nOr press the button below.",
+        Some(&kb),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn handle_hello(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    bot.send_message(obj.message.peer_id, "Hello there! 👋", None)
+        .await?;
+    Ok(())
+}
+
+async fn handle_callback(bot: Bot, obj: MessageEventObject) -> HandlerResult {
+    // Respond to the inline callback with a notification
+    bot.send_message_event_answer(
+        &obj.event_id,
+        obj.user_id,
+        obj.peer_id,
+        Some(serde_json::json!({ "type": "show_snackbar", "text": "Here is your info!" })),
+    )
+    .await?;
+
+    // Also send a follow-up message
+    bot.send_message(obj.peer_id, "You requested info. Here it is!", None)
+        .await?;
+    Ok(())
 }
 
 async fn handle_message(

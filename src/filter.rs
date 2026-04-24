@@ -1,5 +1,5 @@
 use crate::dispatcher::HandlerResult;
-use crate::types::{KnownUpdate, MessageNewObject, Update, UpdateKind};
+use crate::types::{KnownUpdate, Update, UpdateKind};
 use dptree::di::DependencyMap;
 use dptree::prelude::*;
 use serde_json::Value;
@@ -43,17 +43,27 @@ pub fn is_callback() -> Handler<'static, DependencyMap, HandlerResult> {
     })
 }
 
-/// Filter for text commands (exact match or string starting with `prefix `)
-pub fn command(prefix: &'static str) -> impl Fn(&MessageNewObject) -> bool + Send + Sync + 'static {
-    move |obj: &MessageNewObject| -> bool {
-        let text = obj.message.text.trim();
-        text == prefix || text.starts_with(&format!("{} ", prefix))
-    }
+/// Extraction filter for text commands (exact match or string starting with `prefix `)
+pub fn command(prefix: &'static str) -> Handler<'static, DependencyMap, HandlerResult> {
+    dptree::filter_map(move |update: Update| {
+        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
+            let text = object.message.text.trim();
+            if text == prefix || text.starts_with(&format!("{} ", prefix)) {
+                return Some(object);
+            }
+        }
+        None
+    })
 }
 
-/// Filter for specific message text
-pub fn is_text(
-    expected: &'static str,
-) -> impl Fn(&MessageNewObject) -> bool + Send + Sync + 'static {
-    move |obj: &MessageNewObject| -> bool { obj.message.text == expected }
+/// Extraction filter for specific message text
+pub fn is_text(expected: &'static str) -> Handler<'static, DependencyMap, HandlerResult> {
+    dptree::filter_map(move |update: Update| {
+        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
+            if object.message.text == expected {
+                return Some(object);
+            }
+        }
+        None
+    })
 }

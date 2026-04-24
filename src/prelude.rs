@@ -5,5 +5,5 @@ pub use crate::bot::Bot;
 pub use crate::dispatcher::{Dispatcher, DispatcherBuilder, HandlerResult, ShutdownToken};
 pub use crate::filter;
 pub use crate::keyboard::{Action, ButtonColor, Keyboard, KeyboardButton};
-pub use crate::types::{KnownUpdate, MessageNewObject, Update, UpdateKind, VkError};
+pub use crate::types::{KnownUpdate, MessageEventObject, MessageNewObject, Update, UpdateKind, VkError};
 pub use dptree::{self, prelude::*};
