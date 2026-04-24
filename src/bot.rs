@@ -22,7 +22,8 @@ impl Bot {
     where
         S: Into<String>,
     {
-        let api_url = reqwest::Url::from_str("https://api.vk.ru").expect("");
+        let api_url = reqwest::Url::from_str("https://api.vk.ru")
+            .expect("hardcoded VK API URL should always be valid");
         Self {
             token: Arc::from(token.into()),
             group_id: Arc::from(group_id.into()),
