@@ -49,6 +49,14 @@ impl Keyboard {
         }
     }
 
+    pub fn inline() -> Self {
+        Self {
+            one_time: false,
+            inline: true,
+            buttons: vec![],
+        }
+    }
+
     pub fn add_row(mut self, row: Vec<KeyboardButton>) -> Self {
         self.buttons.push(row);
         self
