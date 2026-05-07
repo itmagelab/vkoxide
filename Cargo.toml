@@ -1,13 +1,13 @@
 [package]
 name = "vkoxide"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
 description = "vkoxide is a lightweight, strictly asynchronous SDK and framework in Rust designed for building VKontakte community bots using the Bots Long Poll API."
 authors = ["iTmage Lab <contact@itmagelab.ru>"]
 readme = "README.md"
-repository = "https://gitverse.ru/itmagelab/vkoxide"
-homepage = "https://gitverse.ru/itmagelab/vkoxide"
+repository = "https://github.com/itmagelab/vkoxide"
+homepage = "https://github.com/itmagelab/vkoxide"
 keywords = ["VK", "API"]
 categories = ["api-bindings", "web-programming", "asynchronous"]
 
