@@ -65,6 +65,7 @@ impl Dispatcher {
 
     pub async fn dispatch(mut self) -> Result<(), VkError> {
         let server = self.server().await?;
+        tracing::info!("LongPoll server: {}", server.server);
 
         let mut ts = server.ts;
         let mut shutdown = self.shutdown.take();
