@@ -92,6 +92,7 @@ impl Dispatcher {
                     break;
                 }
                 res = self.bot.client.inner.get(url).query(params).send() => {
+                    dbg!(&res);
                     res?.json::<LongPollResponse>().await?
                 }
             };
