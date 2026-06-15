@@ -22,14 +22,14 @@ pub type HandlerResult = Result<(), BoxError>;
 pub struct Dispatcher {
     bot: Bot,
     deps: DependencyMap,
-    handler: Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>,
+    handler: Arc<dptree::Handler<'static, HandlerResult>>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
 pub struct DispatcherBuilder {
     bot: Bot,
     deps: DependencyMap,
-    handler: Option<Arc<dptree::Handler<'static, DependencyMap, HandlerResult>>>,
+    handler: Option<Arc<dptree::Handler<'static, HandlerResult>>>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
 }
 
@@ -143,7 +143,7 @@ impl DispatcherBuilder {
 
     pub fn handler(
         mut self,
-        handler: dptree::Handler<'static, DependencyMap, HandlerResult>,
+        handler: dptree::Handler<'static, HandlerResult>,
     ) -> Self {
         self.handler = Some(Arc::new(handler));
         self

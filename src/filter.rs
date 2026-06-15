@@ -1,11 +1,10 @@
 use crate::dispatcher::HandlerResult;
 use crate::types::{KnownUpdate, Update, UpdateKind};
-use dptree::di::DependencyMap;
 use dptree::prelude::*;
 use serde_json::Value;
 
 /// Extraction filter for any new message
-pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
+pub fn any_message() -> Handler<'static, HandlerResult> {
     dptree::filter_map(|update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             Some(object)
@@ -15,7 +14,7 @@ pub fn any_message() -> Handler<'static, DependencyMap, HandlerResult> {
     })
 }
 
-pub fn is_start() -> Handler<'static, DependencyMap, HandlerResult> {
+pub fn is_start() -> Handler<'static, HandlerResult> {
     dptree::filter_map(|update: Update| {
         match update.kind {
             UpdateKind::Known(KnownUpdate::MessageNew { object })
@@ -33,7 +32,7 @@ pub fn is_start() -> Handler<'static, DependencyMap, HandlerResult> {
 }
 
 /// Extraction filter for callback events
-pub fn is_callback() -> Handler<'static, DependencyMap, HandlerResult> {
+pub fn is_callback() -> Handler<'static, HandlerResult> {
     dptree::filter_map(|update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageEvent { object }) = update.kind {
             Some(object)
@@ -44,7 +43,7 @@ pub fn is_callback() -> Handler<'static, DependencyMap, HandlerResult> {
 }
 
 /// Extraction filter for text commands (exact match or string starting with `prefix `)
-pub fn command(prefix: &'static str) -> Handler<'static, DependencyMap, HandlerResult> {
+pub fn command(prefix: &'static str) -> Handler<'static, HandlerResult> {
     dptree::filter_map(move |update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             let text = object.message.text.trim();
@@ -57,7 +56,7 @@ pub fn command(prefix: &'static str) -> Handler<'static, DependencyMap, HandlerR
 }
 
 /// Extraction filter for specific message text
-pub fn is_text(expected: &'static str) -> Handler<'static, DependencyMap, HandlerResult> {
+pub fn is_text(expected: &'static str) -> Handler<'static, HandlerResult> {
     dptree::filter_map(move |update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             if object.message.text == expected {

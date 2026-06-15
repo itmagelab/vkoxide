@@ -1,4 +1,3 @@
-use dptree::di::DependencyMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use vkoxide::prelude::*;
@@ -46,7 +45,7 @@ async fn main() {
     println!("Dispatcher stopped.");
 }
 
-fn schema() -> dptree::Handler<'static, DependencyMap, HandlerResult> {
+fn schema() -> dptree::Handler<'static, HandlerResult> {
     dptree::entry()
         // Handle the initial "Start" button press (payload command)
         .branch(filter::is_start().endpoint(handle_start))
