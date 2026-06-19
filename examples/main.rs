@@ -14,6 +14,13 @@ pub struct Database {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "vkoxide=debug,info".into()),
+        )
+        .init();
+
     dotenvy::dotenv().ok();
 
     let token = std::env::var("VKOXIDE_TOKEN").unwrap();
@@ -36,13 +43,13 @@ async fn main() {
     // Graceful shutdown on Ctrl+C
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.unwrap();
-        println!("\nShutdown signal received. Gracefully stopping...");
+        tracing::info!("Shutdown signal received. Gracefully stopping...");
         shutdown_token.shutdown().unwrap();
     });
 
-    println!("Starting long-poll dispatcher with dptree branching...");
+    tracing::info!("Starting long-poll dispatcher with dptree branching...");
     dispatcher.dispatch().await.unwrap();
-    println!("Dispatcher stopped.");
+    tracing::info!("Dispatcher stopped.");
 }
 
 fn schema() -> dptree::Handler<'static, HandlerResult> {

@@ -92,27 +92,113 @@ impl Dispatcher {
                     break;
                 }
                 res = self.bot.client.inner.get(url).query(params).send() => {
-                    dbg!(&res);
-                    res?.json::<LongPollResponse>().await?
+                    let response_result = res;
+                    match &response_result {
+                        Ok(response) => {
+                            tracing::debug!(
+                                status = %response.status(),
+                                "LongPoll request finished"
+                            );
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                error = %err,
+                                "LongPoll request failed"
+                            );
+                        }
+                    }
+                    response_result?.json::<LongPollResponse>().await?
                 }
             };
 
             ts = response.ts.to_string();
 
             for update in response.updates {
+                let update_type = match &update.kind {
+                    UpdateKind::Known(KnownUpdate::MessageNew { .. }) => "message_new",
+                    UpdateKind::Known(KnownUpdate::MessageReply { .. }) => "message_reply",
+                    UpdateKind::Known(KnownUpdate::MessageTypingState { .. }) => "message_typing_state",
+                    UpdateKind::Known(KnownUpdate::MessageRead { .. }) => "message_read",
+                    UpdateKind::Known(KnownUpdate::MessageEvent { .. }) => "message_event",
+                    UpdateKind::Unknown(_) => "unknown",
+                };
+
+                let span = tracing::info_span!(
+                    "vkoxide_update",
+                    event_id = %update.event_id,
+                    update_type = %update_type,
+                );
+
                 let mut deps = self.deps.clone();
                 deps.insert(update.clone());
                 deps.insert(self.bot.clone());
 
-                match self.handler.dispatch(deps).await {
-                    ControlFlow::Break(Ok(_)) => {}
-                    ControlFlow::Break(Err(e)) => {
-                        tracing::error!("Handler error: {}", e);
+                let handler = self.handler.clone();
+                let process_update = async move {
+                    match &update.kind {
+                        UpdateKind::Known(KnownUpdate::MessageNew { object }) => {
+                            tracing::info!(
+                                peer_id = %object.message.peer_id,
+                                from_id = %object.message.from_id,
+                                text = %object.message.text,
+                                "Received new message"
+                            );
+                        }
+                        UpdateKind::Known(KnownUpdate::MessageReply { object }) => {
+                            tracing::info!(
+                                peer_id = %object.peer_id,
+                                from_id = %object.from_id,
+                                text = %object.text,
+                                "Received reply message"
+                            );
+                        }
+                        UpdateKind::Known(KnownUpdate::MessageTypingState { object }) => {
+                            tracing::debug!(
+                                from_id = %object.from_id,
+                                to_id = %object.to_id,
+                                state = %object.state,
+                                "Received typing state update"
+                            );
+                        }
+                        UpdateKind::Known(KnownUpdate::MessageRead { object }) => {
+                            tracing::debug!(
+                                from_id = %object.from_id,
+                                peer_id = %object.peer_id,
+                                read_message_id = %object.read_message_id,
+                                "Received message read update"
+                            );
+                        }
+                        UpdateKind::Known(KnownUpdate::MessageEvent { object }) => {
+                            tracing::info!(
+                                user_id = %object.user_id,
+                                peer_id = %object.peer_id,
+                                event_id = %object.event_id,
+                                "Received message event"
+                            );
+                        }
+                        UpdateKind::Unknown(value) => {
+                            tracing::warn!(
+                                raw_value = ?value,
+                                "Received unknown update event"
+                            );
+                        }
                     }
-                    ControlFlow::Continue(_) => {
-                        // Not handled by any branch
+
+                    match handler.dispatch(deps).await {
+                        ControlFlow::Break(Ok(_)) => {
+                            tracing::debug!("Update processed successfully");
+                        }
+                        ControlFlow::Break(Err(e)) => {
+                            tracing::error!("Handler error: {}", e);
+                        }
+                        ControlFlow::Continue(_) => {
+                            tracing::debug!("Update was not handled by any branch");
+                        }
                     }
-                }
+                };
+
+                use tracing::Instrument;
+                process_update.instrument(span).await;
             }
         }
 

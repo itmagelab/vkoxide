@@ -34,6 +34,7 @@ impl Bot {
         }
     }
 
+    #[tracing::instrument(skip(self, message, keyboard), fields(peer_id = %peer_id))]
     pub async fn send_message(
         &self,
         peer_id: i64,
@@ -55,6 +56,12 @@ impl Bot {
             params.push(("keyboard", keyboard_json.as_str()));
         }
 
+        tracing::debug!(
+            message_len = message.len(),
+            has_keyboard = keyboard.is_some(),
+            "Sending message"
+        );
+
         let url = format!("{}/method/messages.send", self.api_url);
         let response = self
             .client
@@ -68,14 +75,27 @@ impl Bot {
             .await?;
 
         match response {
-            Response::Ok { response } => Ok(response),
-            Response::Err { error } => Err(VkError::Api(error)),
+            Response::Ok { response } => {
+                tracing::debug!("Message sent successfully");
+                Ok(response)
+            }
+            Response::Err { error } => {
+                tracing::error!(
+                    error_code = error.error_code,
+                    error_msg = %error.error_msg,
+                    "VK API Error on messages.send"
+                );
+                Err(VkError::Api(error))
+            }
         }
     }
 
+    #[tracing::instrument(skip(self), fields(user_id = %user_id))]
     pub async fn get_user(&self, user_id: i64) -> Result<User, VkError> {
         let user_id_str = user_id.to_string();
         let params = vec![("user_ids", user_id_str.as_str()), ("v", API_VERSION)];
+
+        tracing::debug!("Fetching user info");
 
         let url = format!("{}/method/users.get", self.api_url);
         let response = self
@@ -90,17 +110,35 @@ impl Bot {
             .await?;
 
         match response {
-            Response::Ok { response } => response.into_iter().next().ok_or_else(|| {
-                VkError::Api(ApiError {
-                    error_code: 0,
-                    error_msg: "User not found".to_string(),
-                    request_params: vec![],
+            Response::Ok { response } => {
+                let user_opt = response.into_iter().next();
+                if let Some(user) = &user_opt {
+                    tracing::debug!(
+                        first_name = %user.first_name,
+                        last_name = %user.last_name,
+                        "Fetched user info successfully"
+                    );
+                }
+                user_opt.ok_or_else(|| {
+                    VkError::Api(ApiError {
+                        error_code: 0,
+                        error_msg: "User not found".to_string(),
+                        request_params: vec![],
+                    })
                 })
-            }),
-            Response::Err { error } => Err(VkError::Api(error)),
+            }
+            Response::Err { error } => {
+                tracing::error!(
+                    error_code = error.error_code,
+                    error_msg = %error.error_msg,
+                    "VK API Error on users.get"
+                );
+                Err(VkError::Api(error))
+            }
         }
     }
 
+    #[tracing::instrument(skip(self), fields(peer_id = %peer_id))]
     pub async fn get_conversation(&self, peer_id: i64) -> Result<Conversation, VkError> {
         let peer_ids_str = peer_id.to_string();
         let group_id_str = self.group_id.to_string();
@@ -110,6 +148,8 @@ impl Bot {
             ("group_id", group_id_str.as_str()),
             ("v", API_VERSION),
         ];
+
+        tracing::debug!("Fetching conversation info");
 
         let url = format!("{}/method/messages.getConversationsById", self.api_url);
         let response = self
@@ -124,17 +164,34 @@ impl Bot {
             .await?;
 
         match response {
-            Response::Ok { response } => response.items.into_iter().next().ok_or_else(|| {
-                VkError::Api(ApiError {
-                    error_code: 0,
-                    error_msg: "Conversation not found".to_string(),
-                    request_params: vec![],
+            Response::Ok { response } => {
+                let conv_opt = response.items.into_iter().next();
+                if let Some(conv) = &conv_opt {
+                    tracing::debug!(
+                        title = ?conv.chat_settings.as_ref().map(|s| &s.title),
+                        "Fetched conversation successfully"
+                    );
+                }
+                conv_opt.ok_or_else(|| {
+                    VkError::Api(ApiError {
+                        error_code: 0,
+                        error_msg: "Conversation not found".to_string(),
+                        request_params: vec![],
+                    })
                 })
-            }),
-            Response::Err { error } => Err(VkError::Api(error)),
+            }
+            Response::Err { error } => {
+                tracing::error!(
+                    error_code = error.error_code,
+                    error_msg = %error.error_msg,
+                    "VK API Error on messages.getConversationsById"
+                );
+                Err(VkError::Api(error))
+            }
         }
     }
 
+    #[tracing::instrument(skip(self, event_data), fields(event_id = %event_id, user_id = %user_id, peer_id = %peer_id))]
     pub async fn send_message_event_answer(
         &self,
         event_id: &str,
@@ -158,6 +215,8 @@ impl Bot {
             params.push(("event_data", event_data_str.as_str()));
         }
 
+        tracing::debug!("Sending message event answer");
+
         let url = format!("{}/method/messages.sendMessageEventAnswer", self.api_url);
         let response = self
             .client
@@ -171,8 +230,18 @@ impl Bot {
             .await?;
 
         match response {
-            Response::Ok { response } => Ok(response),
-            Response::Err { error } => Err(VkError::Api(error)),
+            Response::Ok { response } => {
+                tracing::debug!("Message event answer sent successfully");
+                Ok(response)
+            }
+            Response::Err { error } => {
+                tracing::error!(
+                    error_code = error.error_code,
+                    error_msg = %error.error_msg,
+                    "VK API Error on messages.sendMessageEventAnswer"
+                );
+                Err(VkError::Api(error))
+            }
         }
     }
 }
