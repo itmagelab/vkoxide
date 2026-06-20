@@ -58,10 +58,10 @@ pub fn command(prefix: &'static str) -> Handler<'static, HandlerResult> {
 /// Extraction filter for specific message text
 pub fn is_text(expected: &'static str) -> Handler<'static, HandlerResult> {
     dptree::filter_map(move |update: Update| {
-        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
-            if object.message.text == expected {
-                return Some(object);
-            }
+        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind
+            && object.message.text == expected
+        {
+            return Some(object);
         }
         None
     })
