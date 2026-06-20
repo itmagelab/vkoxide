@@ -197,7 +197,7 @@ impl Bot {
         event_id: &str,
         user_id: i64,
         peer_id: i64,
-        event_data: Option<serde_json::Value>,
+        event_data: Option<&crate::event_data::EventData>,
     ) -> Result<serde_json::Value, VkError> {
         let user_id_str = user_id.to_string();
         let peer_id_str = peer_id.to_string();
@@ -211,7 +211,7 @@ impl Bot {
 
         let event_data_str;
         if let Some(da) = event_data {
-            event_data_str = serde_json::to_string(&da).unwrap_or_default();
+            event_data_str = serde_json::to_string(da).unwrap_or_default();
             params.push(("event_data", event_data_str.as_str()));
         }
 

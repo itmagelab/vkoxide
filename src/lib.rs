@@ -1,5 +1,6 @@
 pub mod bot;
 pub mod dispatcher;
+pub mod event_data;
 pub mod filter;
 pub mod keyboard;
 pub use dptree;
@@ -9,4 +10,5 @@ pub mod utils;
 
 pub use bot::Bot;
 pub use crate::dispatcher::{Dispatcher, DispatcherBuilder, ShutdownToken};
+pub use event_data::EventData;
 pub use types::{KnownUpdate, Update, UpdateKind, VkError};

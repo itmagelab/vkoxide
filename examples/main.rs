@@ -131,7 +131,7 @@ async fn handle_callback(bot: Bot, obj: MessageEventObject) -> HandlerResult {
         &obj.event_id,
         obj.user_id,
         obj.peer_id,
-        Some(serde_json::json!({ "type": "show_snackbar", "text": "Here is your info!" })),
+        Some(&EventData::show_snackbar("Here is your info!")),
     )
     .await?;
 
