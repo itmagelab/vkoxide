@@ -8,7 +8,7 @@ pub mod prelude;
 pub mod types;
 pub mod utils;
 
-pub use bot::Bot;
 pub use crate::dispatcher::{Dispatcher, DispatcherBuilder, ShutdownToken};
+pub use bot::Bot;
 pub use event_data::EventData;
 pub use types::{KnownUpdate, Update, UpdateKind, VkError};

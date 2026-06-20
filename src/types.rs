@@ -173,4 +173,3 @@ pub struct MessageObject {
     pub payload: Option<String>,
     pub version: i64,
 }
-

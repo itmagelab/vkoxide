@@ -117,7 +117,9 @@ impl Dispatcher {
                 let update_type = match &update.kind {
                     UpdateKind::Known(KnownUpdate::MessageNew { .. }) => "message_new",
                     UpdateKind::Known(KnownUpdate::MessageReply { .. }) => "message_reply",
-                    UpdateKind::Known(KnownUpdate::MessageTypingState { .. }) => "message_typing_state",
+                    UpdateKind::Known(KnownUpdate::MessageTypingState { .. }) => {
+                        "message_typing_state"
+                    }
                     UpdateKind::Known(KnownUpdate::MessageRead { .. }) => "message_read",
                     UpdateKind::Known(KnownUpdate::MessageEvent { .. }) => "message_event",
                     UpdateKind::Unknown(_) => "unknown",
@@ -227,10 +229,7 @@ impl DispatcherBuilder {
         ShutdownToken { tx }
     }
 
-    pub fn handler(
-        mut self,
-        handler: dptree::Handler<'static, HandlerResult>,
-    ) -> Self {
+    pub fn handler(mut self, handler: dptree::Handler<'static, HandlerResult>) -> Self {
         self.handler = Some(Arc::new(handler));
         self
     }
