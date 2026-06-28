@@ -82,6 +82,12 @@ impl Dispatcher {
 
             let url = server.server.to_string();
 
+            tracing::debug!(
+                server = %url,
+                ts = %ts_string,
+                "Sending LongPoll request"
+            );
+
             let response_result = tokio::select! {
                 _ = async {
                     if let Some((_, rx)) = &mut shutdown {
@@ -123,10 +129,37 @@ impl Dispatcher {
                 "LongPoll request finished"
             );
 
-            let response = match response_http.json::<LongPollResponse>().await {
+            let response_text = match response_http.text().await {
+                Ok(text) => text,
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to read LongPoll response text, retrying...");
+                    tokio::select! {
+                        _ = async {
+                            if let Some((_, rx)) = &mut shutdown {
+                                rx.recv().await;
+                            } else {
+                                std::future::pending::<()>().await;
+                            }
+                        } => {
+                            break;
+                        }
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    }
+                    retry_delay = std::cmp::min(retry_delay * 2, 30);
+                    continue;
+                }
+            };
+
+            tracing::trace!(raw_response = %response_text, "Received raw LongPoll response");
+
+            let response = match serde_json::from_str::<LongPollResponse>(&response_text) {
                 Ok(resp) => resp,
                 Err(err) => {
-                    tracing::error!(error = %err, "Failed to parse LongPoll response, retrying...");
+                    tracing::error!(
+                        error = %err,
+                        raw_response = %response_text,
+                        "Failed to parse LongPoll response, retrying..."
+                    );
                     tokio::select! {
                         _ = async {
                             if let Some((_, rx)) = &mut shutdown {
@@ -215,6 +248,7 @@ impl Dispatcher {
             ts = response_ts;
 
             let updates = response.updates.unwrap_or_default();
+            tracing::debug!(updates_count = updates.len(), "LongPoll returned updates");
             retry_delay = 1;
 
             for update in updates {

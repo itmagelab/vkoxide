@@ -24,12 +24,34 @@ impl Bot {
     {
         let api_url = reqwest::Url::from_str("https://api.vk.ru")
             .expect("hardcoded VK API URL should always be valid");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(35))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .tcp_keepalive(Some(std::time::Duration::from_secs(15)))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             token: Arc::from(token.into()),
             group_id: Arc::from(group_id.into()),
             api_url: Arc::from(api_url),
             client: Client {
-                inner: Arc::new(reqwest::Client::new()),
+                inner: Arc::new(client),
+            },
+        }
+    }
+
+    pub fn new_with_client<S>(token: S, group_id: S, client: reqwest::Client) -> Self
+    where
+        S: Into<String>,
+    {
+        let api_url = reqwest::Url::from_str("https://api.vk.ru")
+            .expect("hardcoded VK API URL should always be valid");
+        Self {
+            token: Arc::from(token.into()),
+            group_id: Arc::from(group_id.into()),
+            api_url: Arc::from(api_url),
+            client: Client {
+                inner: Arc::new(client),
             },
         }
     }
