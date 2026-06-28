@@ -64,11 +64,12 @@ impl Dispatcher {
     }
 
     pub async fn dispatch(mut self) -> Result<(), VkError> {
-        let server = self.server().await?;
+        let mut server = self.server().await?;
         tracing::info!("LongPoll server: {}", server.server);
 
         let mut ts = server.ts;
         let mut shutdown = self.shutdown.take();
+        let mut retry_delay = 1;
 
         loop {
             let ts_string = ts.to_string();
@@ -81,7 +82,7 @@ impl Dispatcher {
 
             let url = server.server.to_string();
 
-            let response = tokio::select! {
+            let response_result = tokio::select! {
                 _ = async {
                     if let Some((_, rx)) = &mut shutdown {
                         rx.recv().await;
@@ -92,28 +93,131 @@ impl Dispatcher {
                     break;
                 }
                 res = self.bot.client.inner.get(url).query(params).send() => {
-                    let response_result = res;
-                    match &response_result {
-                        Ok(response) => {
-                            tracing::debug!(
-                                status = %response.status(),
-                                "LongPoll request finished"
-                            );
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                error = %err,
-                                "LongPoll request failed"
-                            );
-                        }
-                    }
-                    response_result?.json::<LongPollResponse>().await?
+                    res
                 }
             };
 
-            ts = response.ts.to_string();
+            let response_http = match response_result {
+                Ok(resp) => resp,
+                Err(err) => {
+                    tracing::error!(error = %err, "LongPoll request failed, retrying...");
+                    tokio::select! {
+                        _ = async {
+                            if let Some((_, rx)) = &mut shutdown {
+                                rx.recv().await;
+                            } else {
+                                std::future::pending::<()>().await;
+                            }
+                        } => {
+                            break;
+                        }
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    }
+                    retry_delay = std::cmp::min(retry_delay * 2, 30);
+                    continue;
+                }
+            };
 
-            for update in response.updates {
+            tracing::debug!(
+                status = %response_http.status(),
+                "LongPoll request finished"
+            );
+
+            let response = match response_http.json::<LongPollResponse>().await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to parse LongPoll response, retrying...");
+                    tokio::select! {
+                        _ = async {
+                            if let Some((_, rx)) = &mut shutdown {
+                                rx.recv().await;
+                            } else {
+                                std::future::pending::<()>().await;
+                            }
+                        } => {
+                            break;
+                        }
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    }
+                    retry_delay = std::cmp::min(retry_delay * 2, 30);
+                    continue;
+                }
+            };
+
+            if let Some(failed_code) = response.failed {
+                tracing::warn!(failed_code = failed_code, "LongPoll returned failed code");
+                match failed_code {
+                    1 => {
+                        if let Some(new_ts_val) = response.ts {
+                            ts = match new_ts_val {
+                                serde_json::Value::String(s) => s,
+                                serde_json::Value::Number(n) => n.to_string(),
+                                other => other.to_string().replace('"', ""),
+                            };
+                        } else {
+                            tracing::error!("failed: 1 was returned but new ts is missing");
+                        }
+                    }
+                    2 | 3 => {
+                        tracing::info!("Requesting new LongPoll server...");
+                        match self.server().await {
+                            Ok(new_server) => {
+                                server = new_server;
+                                ts = server.ts.clone();
+                                retry_delay = 1;
+                            }
+                            Err(err) => {
+                                tracing::error!(error = %err, "Failed to request new LongPoll server");
+                                tokio::select! {
+                                    _ = async {
+                                        if let Some((_, rx)) = &mut shutdown {
+                                            rx.recv().await;
+                                        } else {
+                                            std::future::pending::<()>().await;
+                                        }
+                                    } => {
+                                        break;
+                                    }
+                                    _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                                }
+                                retry_delay = std::cmp::min(retry_delay * 2, 30);
+                            }
+                        }
+                    }
+                    _ => {
+                        tokio::select! {
+                            _ = async {
+                                if let Some((_, rx)) = &mut shutdown {
+                                    rx.recv().await;
+                                } else {
+                                    std::future::pending::<()>().await;
+                                }
+                            } => {
+                                break;
+                            }
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                        }
+                        retry_delay = std::cmp::min(retry_delay * 2, 30);
+                    }
+                }
+                continue;
+            }
+
+            let response_ts = match response.ts {
+                Some(serde_json::Value::String(s)) => s,
+                Some(serde_json::Value::Number(n)) => n.to_string(),
+                Some(other) => other.to_string().replace('"', ""),
+                None => {
+                    tracing::error!("LongPoll response missing ts");
+                    continue;
+                }
+            };
+            ts = response_ts;
+
+            let updates = response.updates.unwrap_or_default();
+            retry_delay = 1;
+
+            for update in updates {
                 let update_type = match &update.kind {
                     UpdateKind::Known(KnownUpdate::MessageNew { .. }) => "message_new",
                     UpdateKind::Known(KnownUpdate::MessageReply { .. }) => "message_reply",

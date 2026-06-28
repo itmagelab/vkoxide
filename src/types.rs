@@ -42,8 +42,9 @@ pub struct LongPollServer {
 
 #[derive(Debug, Deserialize)]
 pub struct LongPollResponse {
-    pub ts: String,
-    pub updates: Vec<Update>,
+    pub ts: Option<serde_json::Value>,
+    pub updates: Option<Vec<Update>>,
+    pub failed: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -172,4 +173,45 @@ pub struct MessageObject {
     pub text: String,
     pub payload: Option<String>,
     pub version: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_long_poll_response_normal_string_ts() {
+        let json_data = r#"{"ts":"12345","updates":[]}"#;
+        let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
+        assert_eq!(resp.failed, None);
+        assert!(resp.updates.is_some());
+        assert_eq!(resp.ts.unwrap().as_str().unwrap(), "12345");
+    }
+
+    #[test]
+    fn test_long_poll_response_normal_number_ts() {
+        let json_data = r#"{"ts":12345,"updates":[]}"#;
+        let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
+        assert_eq!(resp.failed, None);
+        assert!(resp.updates.is_some());
+        assert_eq!(resp.ts.unwrap().as_i64().unwrap(), 12345);
+    }
+
+    #[test]
+    fn test_long_poll_response_failed_1() {
+        let json_data = r#"{"failed":1,"ts":"123456"}"#;
+        let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
+        assert_eq!(resp.failed, Some(1));
+        assert_eq!(resp.ts.unwrap().as_str().unwrap(), "123456");
+        assert!(resp.updates.is_none());
+    }
+
+    #[test]
+    fn test_long_poll_response_failed_2_or_3() {
+        let json_data = r#"{"failed":2}"#;
+        let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
+        assert_eq!(resp.failed, Some(2));
+        assert!(resp.ts.is_none());
+        assert!(resp.updates.is_none());
+    }
 }
