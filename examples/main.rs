@@ -58,6 +58,11 @@ fn schema() -> dptree::Handler<'static, HandlerResult> {
         .branch(filter::is_start().endpoint(handle_start))
         // Handle "/help" command
         .branch(filter::command("/help").endpoint(handle_help))
+        // Handle "/persistent" command to show a persistent reply keyboard
+        .branch(filter::command("/persistent").endpoint(handle_persistent))
+        // Handle "/close" command or "Close Keyboard" button press to hide it
+        .branch(filter::command("/close").endpoint(handle_close))
+        .branch(filter::is_text("Close Keyboard").endpoint(handle_close))
         // Handle exact text "hello"
         .branch(filter::is_text("hello").endpoint(handle_hello))
         // Handle inline callback button presses
@@ -77,7 +82,8 @@ fn info_keyboard() -> Keyboard {
     }])
 }
 
-/// Build a reply keyboard with text buttons
+/// Build a reply keyboard with text buttons (one-time keyboard)
+#[allow(dead_code)]
 fn menu_keyboard() -> Keyboard {
     Keyboard::new(true, false).add_row(vec![
         KeyboardButton {
@@ -97,8 +103,28 @@ fn menu_keyboard() -> Keyboard {
     ])
 }
 
+/// Build a persistent reply keyboard with text buttons (will stay under the input field)
+fn persistent_keyboard() -> Keyboard {
+    Keyboard::new(false, false).add_row(vec![
+        KeyboardButton {
+            action: Action::Text {
+                label: "Hello".to_string(),
+                payload: None,
+            },
+            color: Some(ButtonColor::Primary),
+        },
+        KeyboardButton {
+            action: Action::Text {
+                label: "Close Keyboard".to_string(),
+                payload: None,
+            },
+            color: Some(ButtonColor::Negative),
+        },
+    ])
+}
+
 async fn handle_start(bot: Bot, obj: MessageNewObject) -> HandlerResult {
-    let kb = menu_keyboard();
+    let kb = persistent_keyboard();
     bot.send_message(
         obj.message.peer_id,
         "Welcome! Use the buttons below or type /help.",
@@ -112,7 +138,30 @@ async fn handle_help(bot: Bot, obj: MessageNewObject) -> HandlerResult {
     let kb = info_keyboard();
     bot.send_message(
         obj.message.peer_id,
-        "Available commands:\n/help — show this message\nhello — greet the bot\n\nOr press the button below.",
+        "Available commands:\n/help — show this message\nhello — greet the bot\n/persistent — show a persistent keyboard\n/close — remove the keyboard\n\nOr press the button below.",
+        Some(&kb),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn handle_persistent(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    let kb = persistent_keyboard();
+    bot.send_message(
+        obj.message.peer_id,
+        "This is a persistent keyboard. It will stay visible under the input field until you close it.",
+        Some(&kb),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn handle_close(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    // To remove the reply keyboard, we send a Keyboard with empty buttons
+    let kb = Keyboard::new(false, false);
+    bot.send_message(
+        obj.message.peer_id,
+        "Removing the keyboard...",
         Some(&kb),
     )
     .await?;
