@@ -14,14 +14,15 @@ pub fn any_message() -> Handler<'static, HandlerResult> {
     })
 }
 
-pub fn is_start() -> Handler<'static, HandlerResult> {
-    dptree::filter_map(|update: Update| {
+/// Extraction filter for message payload commands matching a specific string
+pub fn is_payload_command(expected: &'static str) -> Handler<'static, HandlerResult> {
+    dptree::filter_map(move |update: Update| {
         match update.kind {
             UpdateKind::Known(KnownUpdate::MessageNew { object })
                 if let Some(payload_str) = &object.message.payload
                     && let Ok(Value::Object(map)) = serde_json::from_str::<Value>(payload_str)
                     && let Some(Value::String(cmd)) = map.get("command")
-                    && cmd == "start" =>
+                    && cmd == expected =>
             {
                 return Some(object);
             }
@@ -29,6 +30,11 @@ pub fn is_start() -> Handler<'static, HandlerResult> {
         };
         None
     })
+}
+
+/// Extraction filter for the initial "Start" payload command
+pub fn is_start() -> Handler<'static, HandlerResult> {
+    is_payload_command("start")
 }
 
 /// Extraction filter for callback events
