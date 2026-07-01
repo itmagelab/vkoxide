@@ -1,5 +1,5 @@
 use crate::dispatcher::HandlerResult;
-use crate::types::{KnownUpdate, Update, UpdateKind};
+use crate::types::{KnownUpdate, MessageNewObject, Update, UpdateKind};
 use dptree::prelude::*;
 use serde_json::Value;
 
@@ -71,4 +71,18 @@ pub fn is_text(expected: &'static str) -> Handler<'static, HandlerResult> {
         }
         None
     })
+}
+
+/// Extraction filter for messages containing a voice message (audio_message)
+pub fn voice_message() -> Handler<'static, HandlerResult> {
+    dptree::filter_map(|update: Update| {
+        if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
+            Some(object)
+        } else {
+            None
+        }
+    })
+    .chain(dptree::filter_map(|object: MessageNewObject| {
+        object.message.voice_message().cloned()
+    }))
 }

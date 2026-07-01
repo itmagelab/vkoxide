@@ -151,6 +151,29 @@ pub struct MessageEventObject {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct AudioMessage {
+    pub id: i64,
+    pub owner_id: i64,
+    pub duration: u32,
+    pub waveform: Vec<i32>,
+    pub link_ogg: String,
+    pub link_mp3: String,
+    pub access_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type")]
+pub enum Attachment {
+    #[serde(rename = "audio_message")]
+    AudioMessage {
+        #[serde(rename = "audio_message")]
+        content: AudioMessage,
+    },
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct MessageNewObject {
     pub message: MessageObject,
     pub client_info: Option<serde_json::Value>,
@@ -159,7 +182,7 @@ pub struct MessageNewObject {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MessageObject {
     pub admin_author_id: Option<i64>,
-    pub attachments: Vec<serde_json::Value>,
+    pub attachments: Vec<Attachment>,
     pub conversation_message_id: i64,
     pub date: i64,
     pub from_id: i64,
@@ -174,6 +197,16 @@ pub struct MessageObject {
     pub payload: Option<String>,
     pub version: i64,
 }
+
+impl MessageObject {
+    pub fn voice_message(&self) -> Option<&AudioMessage> {
+        self.attachments.iter().find_map(|att| match att {
+            Attachment::AudioMessage { content } => Some(content),
+            _ => None,
+        })
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -213,5 +246,93 @@ mod tests {
         assert_eq!(resp.failed, Some(2));
         assert!(resp.ts.is_none());
         assert!(resp.updates.is_none());
+    }
+
+    #[test]
+    fn test_audio_message_deserialization() {
+        let json_data = r#"{
+            "type": "audio_message",
+            "audio_message": {
+                "id": 456239018,
+                "owner_id": 123456,
+                "duration": 5,
+                "waveform": [0, 1, 2, 3, 4],
+                "link_ogg": "https://example.com/voice.ogg",
+                "link_mp3": "https://example.com/voice.mp3",
+                "access_key": "some_secret_key"
+            }
+        }"#;
+
+        let attachment: Attachment = serde_json::from_str(json_data).unwrap();
+        match attachment {
+            Attachment::AudioMessage { content } => {
+                assert_eq!(content.id, 456239018);
+                assert_eq!(content.owner_id, 123456);
+                assert_eq!(content.duration, 5);
+                assert_eq!(content.waveform, vec![0, 1, 2, 3, 4]);
+                assert_eq!(content.link_ogg, "https://example.com/voice.ogg");
+                assert_eq!(content.link_mp3, "https://example.com/voice.mp3");
+                assert_eq!(content.access_key.as_deref(), Some("some_secret_key"));
+            }
+            _ => panic!("Expected Attachment::AudioMessage"),
+        }
+    }
+
+    #[test]
+    fn test_attachment_unknown_deserialization() {
+        let json_data = r#"{
+            "type": "photo",
+            "photo": {
+                "id": 123,
+                "owner_id": 456,
+                "sizes": []
+            }
+        }"#;
+
+        let attachment: Attachment = serde_json::from_str(json_data).unwrap();
+        assert!(matches!(attachment, Attachment::Unknown));
+    }
+
+    #[test]
+    fn test_message_object_voice_message_helper() {
+        let voice_attachment = Attachment::AudioMessage {
+            content: AudioMessage {
+                id: 1,
+                owner_id: 2,
+                duration: 3,
+                waveform: vec![],
+                link_ogg: "ogg_link".to_string(),
+                link_mp3: "mp3_link".to_string(),
+                access_key: None,
+            },
+        };
+
+        let msg = MessageObject {
+            admin_author_id: None,
+            attachments: vec![Attachment::Unknown, voice_attachment.clone()],
+            conversation_message_id: 1,
+            date: 100,
+            from_id: 2,
+            fwd_messages: vec![],
+            id: 1,
+            important: false,
+            is_hidden: false,
+            out: 0,
+            peer_id: 2,
+            random_id: 0,
+            text: "hello".to_string(),
+            payload: None,
+            version: 1,
+        };
+
+        let extracted = msg.voice_message().unwrap();
+        assert_eq!(extracted.id, 1);
+        assert_eq!(extracted.link_ogg, "ogg_link");
+
+        let msg_no_voice = MessageObject {
+            attachments: vec![Attachment::Unknown],
+            ..msg
+        };
+        assert!(msg_no_voice.voice_message().is_none());
     }
 }

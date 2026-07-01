@@ -11,4 +11,4 @@ pub mod utils;
 pub use crate::dispatcher::{Dispatcher, DispatcherBuilder, ShutdownToken};
 pub use bot::Bot;
 pub use event_data::EventData;
-pub use types::{KnownUpdate, Update, UpdateKind, VkError};
+pub use types::{Attachment, AudioMessage, KnownUpdate, Update, UpdateKind, VkError};

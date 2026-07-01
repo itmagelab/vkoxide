@@ -266,4 +266,20 @@ impl Bot {
             }
         }
     }
+
+    /// Downloads a file from the given URL and returns its raw bytes.
+    #[tracing::instrument(skip(self, url), fields(url = %url))]
+    pub async fn download_file(&self, url: &str) -> Result<Vec<u8>, VkError> {
+        tracing::debug!("Downloading file");
+        let response = self
+            .client
+            .inner
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?;
+        
+        let bytes = response.bytes().await?;
+        Ok(bytes.to_vec())
+    }
 }

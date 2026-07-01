@@ -67,6 +67,8 @@ fn schema() -> dptree::Handler<'static, HandlerResult> {
         .branch(filter::is_text("hello").endpoint(handle_hello))
         // Handle inline callback button presses
         .branch(filter::is_callback().endpoint(handle_callback))
+        // Handle voice messages (audiomsg)
+        .branch(filter::voice_message().endpoint(handle_voice))
         // Fallback: handle any other message
         .branch(filter::any_message().endpoint(handle_message))
 }
@@ -187,6 +189,36 @@ async fn handle_callback(bot: Bot, obj: MessageEventObject) -> HandlerResult {
     // Also send a follow-up message
     bot.send_message(obj.peer_id, "You requested info. Here it is!", None)
         .await?;
+    Ok(())
+}
+
+async fn handle_voice(bot: Bot, obj: MessageNewObject, voice: AudioMessage) -> HandlerResult {
+    tracing::info!(
+        "Received voice message with ID {} from owner {}, duration {} seconds.",
+        voice.id,
+        voice.owner_id,
+        voice.duration
+    );
+
+    match bot.download_file(&voice.link_ogg).await {
+        Ok(bytes) => {
+            let msg = format!(
+                "Получено голосовое сообщение!\nПродолжительность: {} сек.\nУспешно скачан файл: {} байт (OGG).",
+                voice.duration,
+                bytes.len()
+            );
+            bot.send_message(obj.message.peer_id, &msg, None).await?;
+        }
+        Err(err) => {
+            tracing::error!("Failed to download voice file: {:?}", err);
+            bot.send_message(
+                obj.message.peer_id,
+                "Голосовое сообщение получено, но не удалось загрузить аудиофайл.",
+                None,
+            )
+            .await?;
+        }
+    }
     Ok(())
 }
 
