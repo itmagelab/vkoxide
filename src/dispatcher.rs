@@ -204,16 +204,7 @@ impl Dispatcher {
     }
 
     async fn process_update(&self, update: Update) {
-        let update_type = match &update.kind {
-            UpdateKind::Known(KnownUpdate::MessageNew { .. }) => "message_new",
-            UpdateKind::Known(KnownUpdate::MessageReply { .. }) => "message_reply",
-            UpdateKind::Known(KnownUpdate::MessageTypingState { .. }) => {
-                "message_typing_state"
-            }
-            UpdateKind::Known(KnownUpdate::MessageRead { .. }) => "message_read",
-            UpdateKind::Known(KnownUpdate::MessageEvent { .. }) => "message_event",
-            UpdateKind::Unknown(_) => "unknown",
-        };
+        let update_type = update.kind.as_str();
 
         let span = tracing::info_span!(
             "vkoxide_update",
@@ -227,60 +218,7 @@ impl Dispatcher {
 
         let handler = self.handler.clone();
         let process_update = async move {
-            match &update.kind {
-                UpdateKind::Known(KnownUpdate::MessageNew { object }) => {
-                    tracing::info!(
-                        peer_id = %object.message.peer_id,
-                        from_id = %object.message.from_id,
-                        text_len = %object.message.text.len(),
-                        conversation_message_id = %object.message.conversation_message_id,
-                        attachments_count = %object.message.attachments.len(),
-                        has_voice = %object.message.voice_message().is_some(),
-                        "Received new message"
-                    );
-                }
-                UpdateKind::Known(KnownUpdate::MessageReply { object }) => {
-                    tracing::info!(
-                        peer_id = %object.peer_id,
-                        from_id = %object.from_id,
-                        text_len = %object.text.len(),
-                        conversation_message_id = %object.conversation_message_id,
-                        attachments_count = %object.attachments.len(),
-                        has_voice = %object.voice_message().is_some(),
-                        "Received reply message"
-                    );
-                }
-                UpdateKind::Known(KnownUpdate::MessageTypingState { object }) => {
-                    tracing::debug!(
-                        from_id = %object.from_id,
-                        to_id = %object.to_id,
-                        state = %object.state,
-                        "Received typing state update"
-                    );
-                }
-                UpdateKind::Known(KnownUpdate::MessageRead { object }) => {
-                    tracing::debug!(
-                        from_id = %object.from_id,
-                        peer_id = %object.peer_id,
-                        read_message_id = %object.read_message_id,
-                        "Received message read update"
-                    );
-                }
-                UpdateKind::Known(KnownUpdate::MessageEvent { object }) => {
-                    tracing::info!(
-                        user_id = %object.user_id,
-                        peer_id = %object.peer_id,
-                        event_id = %object.event_id,
-                        "Received message event"
-                    );
-                }
-                UpdateKind::Unknown(value) => {
-                    tracing::warn!(
-                        raw_value = ?value,
-                        "Received unknown update event"
-                    );
-                }
-            }
+            update.kind.log_details();
 
             match handler.dispatch(deps).await {
                 ControlFlow::Break(Ok(_)) => {

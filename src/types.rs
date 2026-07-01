@@ -90,6 +90,87 @@ impl TryFrom<UpdateKind> for KnownUpdate {
     }
 }
 
+impl UpdateKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UpdateKind::Known(k) => k.as_str(),
+            UpdateKind::Unknown(_) => "unknown",
+        }
+    }
+
+    pub fn log_details(&self) {
+        match self {
+            UpdateKind::Known(k) => k.log_details(),
+            UpdateKind::Unknown(value) => {
+                tracing::warn!(raw_value = ?value, "Received unknown update event");
+            }
+        }
+    }
+}
+
+impl KnownUpdate {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            KnownUpdate::MessageReply { .. } => "message_reply",
+            KnownUpdate::MessageNew { .. } => "message_new",
+            KnownUpdate::MessageTypingState { .. } => "message_typing_state",
+            KnownUpdate::MessageRead { .. } => "message_read",
+            KnownUpdate::MessageEvent { .. } => "message_event",
+        }
+    }
+
+    pub fn log_details(&self) {
+        match self {
+            KnownUpdate::MessageNew { object } => {
+                tracing::info!(
+                    peer_id = %object.message.peer_id,
+                    from_id = %object.message.from_id,
+                    text_len = %object.message.text.len(),
+                    conversation_message_id = %object.message.conversation_message_id,
+                    attachments_count = %object.message.attachments.len(),
+                    has_voice = %object.message.voice_message().is_some(),
+                    "Received new message"
+                );
+            }
+            KnownUpdate::MessageReply { object } => {
+                tracing::info!(
+                    peer_id = %object.peer_id,
+                    from_id = %object.from_id,
+                    text_len = %object.text.len(),
+                    conversation_message_id = %object.conversation_message_id,
+                    attachments_count = %object.attachments.len(),
+                    has_voice = %object.voice_message().is_some(),
+                    "Received reply message"
+                );
+            }
+            KnownUpdate::MessageTypingState { object } => {
+                tracing::debug!(
+                    from_id = %object.from_id,
+                    to_id = %object.to_id,
+                    state = %object.state,
+                    "Received typing state update"
+                );
+            }
+            KnownUpdate::MessageRead { object } => {
+                tracing::debug!(
+                    from_id = %object.from_id,
+                    peer_id = %object.peer_id,
+                    read_message_id = %object.read_message_id,
+                    "Received message read update"
+                );
+            }
+            KnownUpdate::MessageEvent { object } => {
+                tracing::info!(
+                    user_id = %object.user_id,
+                    peer_id = %object.peer_id,
+                    event_id = %object.event_id,
+                    "Received message event"
+                );
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum KnownUpdate {
