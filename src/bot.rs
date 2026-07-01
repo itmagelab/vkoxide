@@ -134,12 +134,8 @@ impl Bot {
         match response {
             Response::Ok { response } => {
                 let user_opt = response.into_iter().next();
-                if let Some(user) = &user_opt {
-                    tracing::debug!(
-                        first_name = %user.first_name,
-                        last_name = %user.last_name,
-                        "Fetched user info successfully"
-                    );
+                if user_opt.is_some() {
+                    tracing::debug!("Fetched user info successfully");
                 }
                 user_opt.ok_or_else(|| {
                     VkError::Api(ApiError {
@@ -188,11 +184,8 @@ impl Bot {
         match response {
             Response::Ok { response } => {
                 let conv_opt = response.items.into_iter().next();
-                if let Some(conv) = &conv_opt {
-                    tracing::debug!(
-                        title = ?conv.chat_settings.as_ref().map(|s| &s.title),
-                        "Fetched conversation successfully"
-                    );
+                if conv_opt.is_some() {
+                    tracing::debug!("Fetched conversation successfully");
                 }
                 conv_opt.ok_or_else(|| {
                     VkError::Api(ApiError {

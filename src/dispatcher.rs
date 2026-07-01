@@ -280,7 +280,10 @@ impl Dispatcher {
                             tracing::info!(
                                 peer_id = %object.message.peer_id,
                                 from_id = %object.message.from_id,
-                                text = %object.message.text,
+                                text_len = %object.message.text.len(),
+                                conversation_message_id = %object.message.conversation_message_id,
+                                attachments_count = %object.message.attachments.len(),
+                                has_voice = %object.message.voice_message().is_some(),
                                 "Received new message"
                             );
                         }
@@ -288,7 +291,10 @@ impl Dispatcher {
                             tracing::info!(
                                 peer_id = %object.peer_id,
                                 from_id = %object.from_id,
-                                text = %object.text,
+                                text_len = %object.text.len(),
+                                conversation_message_id = %object.conversation_message_id,
+                                attachments_count = %object.attachments.len(),
+                                has_voice = %object.voice_message().is_some(),
                                 "Received reply message"
                             );
                         }
