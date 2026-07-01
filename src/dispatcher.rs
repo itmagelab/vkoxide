@@ -23,7 +23,7 @@ pub struct Dispatcher {
     bot: Bot,
     deps: DependencyMap,
     handler: Arc<dptree::Handler<'static, HandlerResult>>,
-    shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
+    shutdown_rx: Option<mpsc::UnboundedReceiver<()>>,
 }
 
 pub struct DispatcherBuilder {
@@ -31,6 +31,21 @@ pub struct DispatcherBuilder {
     deps: DependencyMap,
     handler: Option<Arc<dptree::Handler<'static, HandlerResult>>>,
     shutdown: Option<(mpsc::UnboundedSender<()>, mpsc::UnboundedReceiver<()>)>,
+}
+
+async fn wait_shutdown(rx: &mut Option<mpsc::UnboundedReceiver<()>>) {
+    if let Some(rx) = rx {
+        rx.recv().await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
+async fn sleep_or_shutdown(duration: std::time::Duration, rx: &mut Option<mpsc::UnboundedReceiver<()>>) -> bool {
+    tokio::select! {
+        _ = wait_shutdown(rx) => true,
+        _ = tokio::time::sleep(duration) => false,
+    }
 }
 
 impl Dispatcher {
@@ -68,7 +83,7 @@ impl Dispatcher {
         tracing::info!("LongPoll server: {}", server.server);
 
         let mut ts = server.ts;
-        let mut shutdown = self.shutdown.take();
+        let mut shutdown_rx = self.shutdown_rx.take();
         let mut retry_delay = 1;
 
         loop {
@@ -89,13 +104,7 @@ impl Dispatcher {
             );
 
             let response_result = tokio::select! {
-                _ = async {
-                    if let Some((_, rx)) = &mut shutdown {
-                        rx.recv().await;
-                    } else {
-                        std::future::pending::<()>().await;
-                    }
-                } => {
+                _ = wait_shutdown(&mut shutdown_rx) => {
                     break;
                 }
                 res = self.bot.client.inner.get(url).query(params).send() => {
@@ -107,17 +116,8 @@ impl Dispatcher {
                 Ok(resp) => resp,
                 Err(err) => {
                     tracing::error!(error = %err, "LongPoll request failed, retrying...");
-                    tokio::select! {
-                        _ = async {
-                            if let Some((_, rx)) = &mut shutdown {
-                                rx.recv().await;
-                            } else {
-                                std::future::pending::<()>().await;
-                            }
-                        } => {
-                            break;
-                        }
-                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    if sleep_or_shutdown(std::time::Duration::from_secs(retry_delay), &mut shutdown_rx).await {
+                        break;
                     }
                     retry_delay = std::cmp::min(retry_delay * 2, 30);
                     continue;
@@ -133,17 +133,8 @@ impl Dispatcher {
                 Ok(text) => text,
                 Err(err) => {
                     tracing::error!(error = %err, "Failed to read LongPoll response text, retrying...");
-                    tokio::select! {
-                        _ = async {
-                            if let Some((_, rx)) = &mut shutdown {
-                                rx.recv().await;
-                            } else {
-                                std::future::pending::<()>().await;
-                            }
-                        } => {
-                            break;
-                        }
-                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    if sleep_or_shutdown(std::time::Duration::from_secs(retry_delay), &mut shutdown_rx).await {
+                        break;
                     }
                     retry_delay = std::cmp::min(retry_delay * 2, 30);
                     continue;
@@ -160,17 +151,8 @@ impl Dispatcher {
                         raw_response = %response_text,
                         "Failed to parse LongPoll response, retrying..."
                     );
-                    tokio::select! {
-                        _ = async {
-                            if let Some((_, rx)) = &mut shutdown {
-                                rx.recv().await;
-                            } else {
-                                std::future::pending::<()>().await;
-                            }
-                        } => {
-                            break;
-                        }
-                        _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                    if sleep_or_shutdown(std::time::Duration::from_secs(retry_delay), &mut shutdown_rx).await {
+                        break;
                     }
                     retry_delay = std::cmp::min(retry_delay * 2, 30);
                     continue;
@@ -181,12 +163,8 @@ impl Dispatcher {
                 tracing::warn!(failed_code = failed_code, "LongPoll returned failed code");
                 match failed_code {
                     1 => {
-                        if let Some(new_ts_val) = response.ts {
-                            ts = match new_ts_val {
-                                serde_json::Value::String(s) => s,
-                                serde_json::Value::Number(n) => n.to_string(),
-                                other => other.to_string().replace('"', ""),
-                            };
+                        if let Some(new_ts) = response.ts {
+                            ts = new_ts;
                         } else {
                             tracing::error!("failed: 1 was returned but new ts is missing");
                         }
@@ -201,34 +179,16 @@ impl Dispatcher {
                             }
                             Err(err) => {
                                 tracing::error!(error = %err, "Failed to request new LongPoll server");
-                                tokio::select! {
-                                    _ = async {
-                                        if let Some((_, rx)) = &mut shutdown {
-                                            rx.recv().await;
-                                        } else {
-                                            std::future::pending::<()>().await;
-                                        }
-                                    } => {
-                                        break;
-                                    }
-                                    _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                                if sleep_or_shutdown(std::time::Duration::from_secs(retry_delay), &mut shutdown_rx).await {
+                                    break;
                                 }
                                 retry_delay = std::cmp::min(retry_delay * 2, 30);
                             }
                         }
                     }
                     _ => {
-                        tokio::select! {
-                            _ = async {
-                                if let Some((_, rx)) = &mut shutdown {
-                                    rx.recv().await;
-                                } else {
-                                    std::future::pending::<()>().await;
-                                }
-                            } => {
-                                break;
-                            }
-                            _ = tokio::time::sleep(std::time::Duration::from_secs(retry_delay)) => {}
+                        if sleep_or_shutdown(std::time::Duration::from_secs(retry_delay), &mut shutdown_rx).await {
+                            break;
                         }
                         retry_delay = std::cmp::min(retry_delay * 2, 30);
                     }
@@ -236,14 +196,9 @@ impl Dispatcher {
                 continue;
             }
 
-            let response_ts = match response.ts {
-                Some(serde_json::Value::String(s)) => s,
-                Some(serde_json::Value::Number(n)) => n.to_string(),
-                Some(other) => other.to_string().replace('"', ""),
-                None => {
-                    tracing::error!("LongPoll response missing ts");
-                    continue;
-                }
+            let Some(response_ts) = response.ts else {
+                tracing::error!("LongPoll response missing ts");
+                continue;
             };
             ts = response_ts;
 
@@ -385,7 +340,7 @@ impl DispatcherBuilder {
             handler: self
                 .handler
                 .unwrap_or_else(|| Arc::new(dptree::entry().endpoint(|| async { Ok(()) }))),
-            shutdown: self.shutdown,
+            shutdown_rx: self.shutdown.map(|(_, rx)| rx),
         }
     }
 }

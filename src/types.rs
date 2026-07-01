@@ -40,9 +40,24 @@ pub struct LongPollServer {
     pub ts: String,
 }
 
+fn deserialize_ts<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        Some(serde_json::Value::String(s)) => Ok(Some(s)),
+        Some(serde_json::Value::Number(n)) => Ok(Some(n.to_string())),
+        Some(other) => Ok(Some(other.to_string().replace('"', ""))),
+        None => Ok(None),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct LongPollResponse {
-    pub ts: Option<serde_json::Value>,
+    #[serde(deserialize_with = "deserialize_ts", default)]
+    pub ts: Option<String>,
     pub updates: Option<Vec<Update>>,
     pub failed: Option<i32>,
 }
@@ -218,7 +233,7 @@ mod tests {
         let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(resp.failed, None);
         assert!(resp.updates.is_some());
-        assert_eq!(resp.ts.unwrap().as_str().unwrap(), "12345");
+        assert_eq!(resp.ts.as_deref(), Some("12345"));
     }
 
     #[test]
@@ -227,7 +242,7 @@ mod tests {
         let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(resp.failed, None);
         assert!(resp.updates.is_some());
-        assert_eq!(resp.ts.unwrap().as_i64().unwrap(), 12345);
+        assert_eq!(resp.ts.as_deref(), Some("12345"));
     }
 
     #[test]
@@ -235,7 +250,7 @@ mod tests {
         let json_data = r#"{"failed":1,"ts":"123456"}"#;
         let resp: LongPollResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(resp.failed, Some(1));
-        assert_eq!(resp.ts.unwrap().as_str().unwrap(), "123456");
+        assert_eq!(resp.ts.as_deref(), Some("123456"));
         assert!(resp.updates.is_none());
     }
 

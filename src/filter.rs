@@ -53,7 +53,7 @@ pub fn command(prefix: &'static str) -> Handler<'static, HandlerResult> {
     dptree::filter_map(move |update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             let text = object.message.text.trim();
-            if text == prefix || text.starts_with(&format!("{} ", prefix)) {
+            if text == prefix || (text.starts_with(prefix) && text[prefix.len()..].starts_with(' ')) {
                 return Some(object);
             }
         }

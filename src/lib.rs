@@ -6,7 +6,6 @@ pub mod keyboard;
 pub use dptree;
 pub mod prelude;
 pub mod types;
-pub mod utils;
 
 pub use crate::dispatcher::{Dispatcher, DispatcherBuilder, ShutdownToken};
 pub use bot::Bot;
