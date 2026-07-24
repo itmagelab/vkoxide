@@ -41,7 +41,10 @@ async fn wait_shutdown(rx: &mut Option<mpsc::UnboundedReceiver<()>>) {
     }
 }
 
-async fn sleep_or_shutdown(duration: std::time::Duration, rx: &mut Option<mpsc::UnboundedReceiver<()>>) -> bool {
+async fn sleep_or_shutdown(
+    duration: std::time::Duration,
+    rx: &mut Option<mpsc::UnboundedReceiver<()>>,
+) -> bool {
     tokio::select! {
         _ = wait_shutdown(rx) => true,
         _ = tokio::time::sleep(duration) => false,
@@ -115,7 +118,9 @@ impl Dispatcher {
                 Ok(resp) => resp,
                 Err(err) => {
                     tracing::error!(error = %err, "LongPoll request failed, retrying...");
-                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx).await {
+                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx)
+                        .await
+                    {
                         return None;
                     }
                     *retry_delay = std::cmp::min(*retry_delay * 2, 30);
@@ -132,7 +137,9 @@ impl Dispatcher {
                 Ok(text) => text,
                 Err(err) => {
                     tracing::error!(error = %err, "Failed to read LongPoll response text, retrying...");
-                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx).await {
+                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx)
+                        .await
+                    {
                         return None;
                     }
                     *retry_delay = std::cmp::min(*retry_delay * 2, 30);
@@ -150,7 +157,9 @@ impl Dispatcher {
                         raw_response = %response_text,
                         "Failed to parse LongPoll response, retrying..."
                     );
-                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx).await {
+                    if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx)
+                        .await
+                    {
                         return None;
                     }
                     *retry_delay = std::cmp::min(*retry_delay * 2, 30);
@@ -186,7 +195,12 @@ impl Dispatcher {
                     }
                     Err(err) => {
                         tracing::error!(error = %err, "Failed to request new LongPoll server");
-                        if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx).await {
+                        if sleep_or_shutdown(
+                            std::time::Duration::from_secs(*retry_delay),
+                            shutdown_rx,
+                        )
+                        .await
+                        {
                             return Ok(ControlFlow::Break(()));
                         }
                         *retry_delay = std::cmp::min(*retry_delay * 2, 30);
@@ -194,7 +208,9 @@ impl Dispatcher {
                 }
             }
             _ => {
-                if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx).await {
+                if sleep_or_shutdown(std::time::Duration::from_secs(*retry_delay), shutdown_rx)
+                    .await
+                {
                     return Ok(ControlFlow::Break(()));
                 }
                 *retry_delay = std::cmp::min(*retry_delay * 2, 30);
@@ -246,13 +262,27 @@ impl Dispatcher {
         let mut retry_delay = 1;
 
         loop {
-            let Some(response) = self.poll_once(&server, &ts, &mut shutdown_rx, &mut retry_delay).await else {
+            let Some(response) = self
+                .poll_once(&server, &ts, &mut shutdown_rx, &mut retry_delay)
+                .await
+            else {
                 break;
             };
 
             if let Some(failed_code) = response.failed {
                 tracing::warn!(failed_code = failed_code, "LongPoll returned failed code");
-                if self.handle_longpoll_failure(failed_code, response.ts, &mut server, &mut ts, &mut shutdown_rx, &mut retry_delay).await?.is_break() {
+                if self
+                    .handle_longpoll_failure(
+                        failed_code,
+                        response.ts,
+                        &mut server,
+                        &mut ts,
+                        &mut shutdown_rx,
+                        &mut retry_delay,
+                    )
+                    .await?
+                    .is_break()
+                {
                     break;
                 }
                 continue;

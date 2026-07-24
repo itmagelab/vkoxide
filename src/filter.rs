@@ -53,7 +53,8 @@ pub fn command(prefix: &'static str) -> Handler<'static, HandlerResult> {
     dptree::filter_map(move |update: Update| {
         if let UpdateKind::Known(KnownUpdate::MessageNew { object }) = update.kind {
             let text = object.message.text.trim();
-            if text == prefix || (text.starts_with(prefix) && text[prefix.len()..].starts_with(' ')) {
+            if text == prefix || (text.starts_with(prefix) && text[prefix.len()..].starts_with(' '))
+            {
                 return Some(object);
             }
         }
@@ -85,4 +86,15 @@ pub fn voice_message() -> Handler<'static, HandlerResult> {
     .chain(dptree::filter_map(|object: MessageNewObject| {
         object.message.voice_message().cloned()
     }))
+}
+
+/// Extraction filter for edited message update events
+pub fn edited_message() -> Handler<'static, HandlerResult> {
+    dptree::filter_map(|update: Update| {
+        if let UpdateKind::Known(KnownUpdate::MessageEdit { object }) = update.kind {
+            Some(object)
+        } else {
+            None
+        }
+    })
 }

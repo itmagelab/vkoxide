@@ -65,6 +65,10 @@ fn schema() -> dptree::Handler<'static, HandlerResult> {
         .branch(filter::is_text("Close Keyboard").endpoint(handle_close))
         // Handle exact text "hello"
         .branch(filter::is_text("hello").endpoint(handle_hello))
+        // Handle "/edit" command to demonstrate message editing
+        .branch(filter::command("/edit").endpoint(handle_edit))
+        // Handle edited messages
+        .branch(filter::edited_message().endpoint(handle_edited_message))
         // Handle inline callback button presses
         .branch(filter::is_callback().endpoint(handle_callback))
         // Handle voice messages (audiomsg)
@@ -140,7 +144,7 @@ async fn handle_help(bot: Bot, obj: MessageNewObject) -> HandlerResult {
     let kb = info_keyboard();
     bot.send_message(
         obj.message.peer_id,
-        "Available commands:\n/help — show this message\nhello — greet the bot\n/persistent — show a persistent keyboard\n/close — remove the keyboard\n\nOr press the button below.",
+        "Available commands:\n/help — show this message\n/edit — test editing a sent message\nhello — greet the bot\n/persistent — show a persistent keyboard\n/close — remove the keyboard\n\nOr press the button below.",
         Some(&kb),
     )
     .await?;
@@ -161,12 +165,8 @@ async fn handle_persistent(bot: Bot, obj: MessageNewObject) -> HandlerResult {
 async fn handle_close(bot: Bot, obj: MessageNewObject) -> HandlerResult {
     // To remove the reply keyboard, we send a Keyboard with empty buttons
     let kb = Keyboard::new(false, false);
-    bot.send_message(
-        obj.message.peer_id,
-        "Removing the keyboard...",
-        Some(&kb),
-    )
-    .await?;
+    bot.send_message(obj.message.peer_id, "Removing the keyboard...", Some(&kb))
+        .await?;
     Ok(())
 }
 
@@ -176,19 +176,70 @@ async fn handle_hello(bot: Bot, obj: MessageNewObject) -> HandlerResult {
     Ok(())
 }
 
+async fn handle_edit(bot: Bot, obj: MessageNewObject) -> HandlerResult {
+    let peer_id = obj.message.peer_id;
+    let res = bot
+        .send_message(
+            peer_id,
+            "Original message text... (will edit shortly)",
+            None,
+        )
+        .await?;
+
+    // Wait 1 second to visually simulate delay before editing
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // VK messages.send returns a JSON response containing message_id (or integer ID)
+    if let Some(msg_id) = res.as_i64() {
+        bot.edit_message_by_id(
+            peer_id,
+            msg_id,
+            Some("✨ Message edited successfully via `edit_message_by_id`!"),
+            None,
+        )
+        .await?;
+    } else {
+        // Fallback: edit by conversation message ID (CMID)
+        bot.edit_message_by_cmid(
+            peer_id,
+            obj.message.conversation_message_id + 1,
+            Some("✨ Message edited successfully via `edit_message_by_cmid`!"),
+            None,
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_edited_message(_bot: Bot, obj: MessageObject) -> HandlerResult {
+    tracing::info!(
+        peer_id = obj.peer_id,
+        cmid = obj.conversation_message_id,
+        text = %obj.text,
+        "Received edited message update"
+    );
+    Ok(())
+}
+
 async fn handle_callback(bot: Bot, obj: MessageEventObject) -> HandlerResult {
     // Respond to the inline callback with a notification
     bot.send_message_event_answer(
         &obj.event_id,
         obj.user_id,
         obj.peer_id,
-        Some(&EventData::show_snackbar("Here is your info!")),
+        Some(&EventData::show_snackbar("Message edited!")),
     )
     .await?;
 
-    // Also send a follow-up message
-    bot.send_message(obj.peer_id, "You requested info. Here it is!", None)
-        .await?;
+    // Edit the message that contained the callback button using CMID
+    bot.edit_message_by_cmid(
+        obj.peer_id,
+        obj.conversation_message_id,
+        Some("Updated info message! (Edited via callback button)"),
+        None,
+    )
+    .await?;
     Ok(())
 }
 

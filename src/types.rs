@@ -113,6 +113,7 @@ impl KnownUpdate {
         match self {
             KnownUpdate::MessageReply { .. } => "message_reply",
             KnownUpdate::MessageNew { .. } => "message_new",
+            KnownUpdate::MessageEdit { .. } => "message_edit",
             KnownUpdate::MessageTypingState { .. } => "message_typing_state",
             KnownUpdate::MessageRead { .. } => "message_read",
             KnownUpdate::MessageEvent { .. } => "message_event",
@@ -141,6 +142,17 @@ impl KnownUpdate {
                     attachments_count = %object.attachments.len(),
                     has_voice = %object.voice_message().is_some(),
                     "Received reply message"
+                );
+            }
+            KnownUpdate::MessageEdit { object } => {
+                tracing::info!(
+                    peer_id = %object.peer_id,
+                    from_id = %object.from_id,
+                    text_len = %object.text.len(),
+                    conversation_message_id = %object.conversation_message_id,
+                    attachments_count = %object.attachments.len(),
+                    has_voice = %object.voice_message().is_some(),
+                    "Received edited message"
                 );
             }
             KnownUpdate::MessageTypingState { object } => {
@@ -178,6 +190,8 @@ pub enum KnownUpdate {
     MessageReply { object: MessageObject },
     #[serde(rename = "message_new")]
     MessageNew { object: MessageNewObject },
+    #[serde(rename = "message_edit")]
+    MessageEdit { object: MessageObject },
     #[serde(rename = "message_typing_state")]
     MessageTypingState { object: TypingStateObject },
     #[serde(rename = "message_read")]
@@ -302,7 +316,6 @@ impl MessageObject {
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -430,5 +443,36 @@ mod tests {
             ..msg
         };
         assert!(msg_no_voice.voice_message().is_none());
+    }
+
+    #[test]
+    fn test_message_edit_deserialization() {
+        let json_data = r#"{
+            "type": "message_edit",
+            "object": {
+                "id": 100,
+                "date": 1600000000,
+                "peer_id": 2000000001,
+                "from_id": 12345,
+                "text": "Edited text",
+                "random_id": 0,
+                "attachments": [],
+                "important": false,
+                "is_hidden": false,
+                "out": 1,
+                "conversation_message_id": 42,
+                "fwd_messages": [],
+                "version": 1
+            }
+        }"#;
+
+        let update: KnownUpdate = serde_json::from_str(json_data).unwrap();
+        assert_eq!(update.as_str(), "message_edit");
+        if let KnownUpdate::MessageEdit { object } = update {
+            assert_eq!(object.text, "Edited text");
+            assert_eq!(object.conversation_message_id, 42);
+        } else {
+            panic!("Expected KnownUpdate::MessageEdit");
+        }
     }
 }

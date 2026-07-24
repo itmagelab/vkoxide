@@ -112,6 +112,109 @@ impl Bot {
         }
     }
 
+    #[tracing::instrument(skip(self, message, keyboard), fields(peer_id = %peer_id))]
+    pub async fn edit_message(
+        &self,
+        peer_id: i64,
+        message_id: Option<i64>,
+        conversation_message_id: Option<i64>,
+        message: Option<&str>,
+        keyboard: Option<&keyboard::Keyboard>,
+    ) -> Result<serde_json::Value, VkError> {
+        let peer_id_str = peer_id.to_string();
+        let message_id_str;
+        let cmid_str;
+
+        let mut params = vec![("peer_id", peer_id_str.as_str()), ("v", API_VERSION)];
+
+        if let Some(msg_id) = message_id {
+            message_id_str = msg_id.to_string();
+            params.push(("message_id", message_id_str.as_str()));
+        }
+
+        if let Some(cmid) = conversation_message_id {
+            cmid_str = cmid.to_string();
+            params.push(("conversation_message_id", cmid_str.as_str()));
+        }
+
+        if let Some(msg) = message {
+            params.push(("message", msg));
+        }
+
+        let keyboard_json;
+        if let Some(kb) = keyboard {
+            keyboard_json = serde_json::to_string(kb).unwrap_or_default();
+            params.push(("keyboard", keyboard_json.as_str()));
+        }
+
+        tracing::debug!(
+            has_message_id = message_id.is_some(),
+            has_cmid = conversation_message_id.is_some(),
+            has_message = message.is_some(),
+            has_keyboard = keyboard.is_some(),
+            "Editing message"
+        );
+
+        let url = format!("{}/method/messages.edit", self.api_url);
+        let response = self
+            .client
+            .inner
+            .post(url)
+            .bearer_auth(self.token.as_ref())
+            .query(&params)
+            .send()
+            .await?
+            .json::<Response<serde_json::Value>>()
+            .await?;
+
+        match response {
+            Response::Ok { response } => {
+                tracing::debug!("Message edited successfully");
+                Ok(response)
+            }
+            Response::Err { error } => {
+                tracing::error!(
+                    error_code = error.error_code,
+                    error_msg = %error.error_msg,
+                    "VK API Error on messages.edit"
+                );
+                Err(VkError::Api(error))
+            }
+        }
+    }
+
+    /// Convenience method to edit a message by `conversation_message_id` (CMID).
+    #[inline]
+    pub async fn edit_message_by_cmid(
+        &self,
+        peer_id: i64,
+        conversation_message_id: i64,
+        message: Option<&str>,
+        keyboard: Option<&keyboard::Keyboard>,
+    ) -> Result<serde_json::Value, VkError> {
+        self.edit_message(
+            peer_id,
+            None,
+            Some(conversation_message_id),
+            message,
+            keyboard,
+        )
+        .await
+    }
+
+    /// Convenience method to edit a message by `message_id`.
+    #[inline]
+    pub async fn edit_message_by_id(
+        &self,
+        peer_id: i64,
+        message_id: i64,
+        message: Option<&str>,
+        keyboard: Option<&keyboard::Keyboard>,
+    ) -> Result<serde_json::Value, VkError> {
+        self.edit_message(peer_id, Some(message_id), None, message, keyboard)
+            .await
+    }
+
     #[tracing::instrument(skip(self), fields(user_id = %user_id))]
     pub async fn get_user(&self, user_id: i64) -> Result<User, VkError> {
         let user_id_str = user_id.to_string();
@@ -271,7 +374,7 @@ impl Bot {
             .send()
             .await?
             .error_for_status()?;
-        
+
         let bytes = response.bytes().await?;
         Ok(bytes.to_vec())
     }
