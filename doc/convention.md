@@ -25,3 +25,10 @@
 ## 4. Развитие с AI
 - Документ служит контрактом для генерации нового кода.
 - Любое добавление новых методов API или типов событий сверяется с общим стилем (типизация -> интеграция -> проверка в `examples`).
+
+## 5. Коммиты и версионирование
+- Проект использует [Conventional Commits](https://www.conventionalcommits.org/). От этого напрямую зависит автогенерация `CHANGELOG.md` через [git-cliff](https://git-cliff.org/) (конфиг — `cliff.toml` в корне).
+- Формат сообщения обязателен: `<type>[optional scope]: <description>`. Допустимые типы: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- Критические (ломающие API) изменения помечаются восклицательным знаком: `feat!: ...` либо footer `BREAKING CHANGE: ...` — git-cliff выделяет их отдельно.
+- Теги релизов — в формате SemVer: `vX.Y.Z`. git-cliff группирует изменения между тегами.
+- Сгенерировать changelog локально: `git cliff --tag vX.Y.Z --output CHANGELOG.md`. В CI changelog и GitHub-релиз создаются автоматически при пуше тега (`.github/workflows/release.yml`).
